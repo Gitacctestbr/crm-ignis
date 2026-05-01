@@ -392,21 +392,32 @@ export function SidePanelApp() {
   }, [dayFilter, dayRange]);
 
   return (
-    <div className="min-h-screen bg-[rgb(var(--bg))] text-[rgb(var(--text))] p-3">
-      <div className="flex items-center gap-2">
-        <div className="font-black">CRM IGNIS</div>
-        <div className="text-xs text-[rgb(var(--muted))]">• Padrão</div>
+    <div className="min-h-screen bg-[#09090b] text-[rgb(var(--text))] p-5">
+      <div className="flex items-center gap-2 pb-3 border-b border-[rgb(var(--border))]/50">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          className="text-[rgb(var(--accent))] shrink-0"
+          style={{ filter: "drop-shadow(0 0 5px rgba(234,124,48,0.65))" }}
+        >
+          <path d="M12.963 2.286a.75.75 0 00-1.071-.136 9.742 9.742 0 00-3.539 6.177A7.547 7.547 0 016.648 6.61a.75.75 0 00-1.152-.082A9 9 0 1015.68 4.534a7.46 7.46 0 01-2.717-2.248zM15.75 14.25a3.75 3.75 0 11-7.313-1.172c.628.465 1.35.81 2.133 1a5.99 5.99 0 011.925-3.545 3.75 3.75 0 013.255 3.717z" />
+        </svg>
+        <div className="font-black tracking-wide text-sm">CRM IGNIS</div>
+        <div className="text-[10px] text-[rgb(var(--muted))] font-mono">• Padrão</div>
       </div>
 
-      <div className="flex gap-2 mt-3 flex-wrap">
+      <div className="flex gap-1.5 mt-3 flex-wrap">
         {(["Outbound", "Social", "Tasks", "Filtros", "Métricas", "Settings"] as Tab[]).map((t) => (
           <button
             key={t}
             className={cx(
-              "text-xs px-3 py-1 rounded-[var(--radius)] border",
+              "text-[11px] px-3 py-1.5 rounded-full border transition-all duration-200 font-medium",
               tab === t
-                ? "border-[rgb(var(--accent))] bg-white/5"
-                : "border-[rgb(var(--border))] hover:bg-white/5",
+                ? "border-[rgba(234,124,48,0.6)] bg-[rgba(234,124,48,0.10)] text-[rgb(var(--accent))] animate-[ignis-pulse_3s_ease-in-out_infinite]"
+                : "border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10 hover:border-[rgba(234,124,48,0.5)] hover:text-[rgb(var(--text))]",
             )}
             onClick={() => setTab(t)}
           >
@@ -417,7 +428,7 @@ export function SidePanelApp() {
 
       <div className="mt-3 flex items-center gap-2">
         <button
-          className="text-xs px-3 py-2 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:bg-white/5"
+          className="text-xs px-3 py-2 rounded-full border border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10 hover:border-[rgba(234,124,48,0.45)] transition-all"
           onClick={() => void captureFromCurrentTab()}
           disabled={!activeBoard}
         >
@@ -425,7 +436,7 @@ export function SidePanelApp() {
         </button>
 
         <button
-          className="text-xs px-3 py-2 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:bg-white/5"
+          className="text-xs px-3 py-2 rounded-full border border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10 hover:border-[rgba(234,124,48,0.45)] transition-all"
           onClick={() => void openOrFocusDashboard()}
         >
           Abrir Kanban
@@ -438,7 +449,7 @@ export function SidePanelApp() {
         <>
           <div className="mt-3 flex items-center gap-2">
             <input
-              className="text-xs w-full px-3 py-2 rounded-[var(--radius)] bg-[rgb(var(--panel))] border border-[rgb(var(--border))] outline-none focus:border-[rgb(var(--accent))]"
+              className="text-xs w-full px-4 py-2.5 rounded-xl bg-black/50 border border-white/10 outline-none focus:border-[#ea7c30] focus:shadow-[0_0_0_3px_rgba(234,124,48,0.12)] transition-all"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar…"
@@ -452,13 +463,13 @@ export function SidePanelApp() {
               type="date"
               value={dayFilter}
               onChange={(e) => setDayFilter(e.target.value)}
-              className="text-xs w-full px-3 py-2 rounded-[var(--radius)] bg-[rgb(var(--panel))] border border-[rgb(var(--border))] outline-none focus:border-[rgb(var(--accent))]"
+              className="text-xs w-full px-4 py-2.5 rounded-xl bg-black/50 border border-white/10 outline-none focus:border-[#ea7c30] focus:shadow-[0_0_0_3px_rgba(234,124,48,0.12)] transition-all"
               title="Mostra somente leads adicionados no dia selecionado"
             />
 
             <button
               type="button"
-              className="text-xs px-3 py-2 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:bg-white/5"
+              className="text-xs px-3 py-2 rounded-full border border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10 hover:border-[rgba(234,124,48,0.45)] transition-all"
               onClick={() => setDayFilter(todayAsInputDate())}
               title="Filtrar por hoje"
             >
@@ -468,7 +479,7 @@ export function SidePanelApp() {
             {dayFilter ? (
               <button
                 type="button"
-                className="text-xs px-3 py-2 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:bg-white/5"
+                className="text-xs px-3 py-2 rounded-full border border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10 hover:border-[rgba(234,124,48,0.45)] transition-all"
                 onClick={() => setDayFilter("")}
                 title="Remover filtro de dia"
               >
@@ -477,22 +488,22 @@ export function SidePanelApp() {
             ) : null}
           </div>
 
-          <div className="mt-3 border border-[rgb(var(--border))] rounded-[var(--radius)] overflow-hidden">
-            <div className="p-2 text-xs font-bold border-b border-[rgb(var(--border))] bg-white/5">
+          <div className="mt-4 border border-white/10 rounded-xl overflow-hidden">
+            <div className="px-4 py-2.5 text-xs font-semibold border-b border-white/10 bg-white/[0.025]">
               Leads para abordar ({filtered.length}){dayLabel ? ` • ${dayLabel}` : ""}
             </div>
 
-            <div className="p-2 flex flex-col gap-2">
+            <div className="p-3 flex flex-col gap-2.5">
               {filtered.map((l) => {
                 const firstLetter = (String(l.username || "?")[0] || "?").toUpperCase();
 
                 return (
                   <div
                     key={l.id}
-                    className="p-2 rounded-[var(--radius)] border border-[rgb(var(--border))] bg-white/5"
+                    className="p-3 rounded-xl border border-white/10 bg-white/5 transition-all duration-200 hover:border-[rgba(234,124,48,0.28)] hover:bg-white/[0.07]"
                   >
                     <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full border border-[rgb(var(--border))] bg-white/5 grid place-items-center text-[10px] font-black">
+                      <div className="w-8 h-8 rounded-full border border-[rgba(234,124,48,0.3)] bg-[rgba(234,124,48,0.08)] grid place-items-center text-[10px] font-black text-[rgb(var(--accent))]">
                         {firstLetter}
                       </div>
 
@@ -512,7 +523,7 @@ export function SidePanelApp() {
                       </div>
 
                       <button
-                        className="text-[11px] px-2 py-1 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:bg-white/5"
+                        className="text-[11px] px-2 py-1 rounded-full border border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10 hover:border-[rgba(234,124,48,0.4)] transition-all"
                         onClick={() => void onDelete(l.id, l.username)}
                       >
                         Remover
@@ -545,12 +556,12 @@ export function SidePanelApp() {
 
       {toastState ? (
         <div className="fixed right-3 bottom-3 z-50">
-          <div className="text-xs font-bold px-3 py-2 rounded-[var(--radius)] border border-[rgb(var(--border))] bg-white/10 backdrop-blur shadow-[var(--shadow-sm)] flex items-center gap-2">
+          <div className="text-xs font-bold px-3 py-2 rounded-xl border border-white/10 bg-white/10 backdrop-blur shadow-[var(--shadow-sm)] flex items-center gap-2">
             <div>{toastState.message}</div>
             {toastState.actionLabel && toastState.onAction ? (
               <button
                 type="button"
-                className="text-[11px] px-2 py-1 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:bg-white/5"
+                className="text-[11px] px-2 py-1 rounded-full border border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10 hover:border-[rgba(234,124,48,0.4)] transition-all"
                 onClick={() => {
                   try {
                     toastState.onAction?.();
@@ -602,7 +613,7 @@ interface SaveStatusPillProps {
 function SaveStatusPill({ status, isClosed }: SaveStatusPillProps) {
   if (isClosed) {
     return (
-      <div className="text-[11px] font-mono px-3 py-2 rounded-[var(--radius)] border border-[rgb(var(--border))] bg-white/5 text-[rgb(var(--muted))]">
+      <div className="text-[11px] font-mono px-3 py-2 rounded-full border border-white/10 bg-white/5 text-[rgb(var(--muted))]">
         🔒 Bloqueado
       </div>
     );
@@ -632,7 +643,7 @@ function SaveStatusPill({ status, isClosed }: SaveStatusPillProps) {
     <div
       aria-live="polite"
       className={cx(
-        "text-[11px] font-mono px-3 py-2 rounded-[var(--radius)] border bg-white/5 min-w-[84px] text-center transition-colors",
+        "text-[11px] font-mono px-3 py-2 rounded-full border bg-white/5 min-w-[84px] text-center transition-colors",
         tone,
       )}
     >
@@ -643,13 +654,13 @@ function SaveStatusPill({ status, isClosed }: SaveStatusPillProps) {
 
 function Section({ title, children, right, headerRight }: SectionProps) {
   return (
-    <div className="mt-3 border border-[rgb(var(--border))] rounded-[var(--radius)] overflow-hidden">
-      <div className="p-2 text-xs font-bold border-b border-[rgb(var(--border))] bg-white/5 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <div>{title}</div>
-          {right ? <div className="text-[11px] text-[rgb(var(--muted))] font-normal">{right}</div> : null}
+    <div className="mt-3 border border-[rgb(var(--border))]/80 rounded-[var(--radius)] overflow-hidden bg-[rgb(var(--panel))]/50 backdrop-blur-sm transition-all duration-300 hover:border-[rgba(234,124,48,0.28)] hover:shadow-[0_0_20px_rgba(234,124,48,0.07)]">
+      <div className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest border-b border-[rgb(var(--border))]/60 bg-white/[0.025] flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="text-[rgb(var(--muted))] shrink-0">{title}</div>
+          {right ? <div className="text-[10px] text-[rgb(var(--muted))]/60 font-normal normal-case tracking-normal truncate">{right}</div> : null}
         </div>
-        {headerRight ? <div>{headerRight}</div> : null}
+        {headerRight ? <div className="shrink-0">{headerRight}</div> : null}
       </div>
       <div className="p-2">{children}</div>
     </div>
@@ -671,7 +682,7 @@ function CtaRegisterRow({ count, disabled, hasCta, onClick }: CtaRegisterRowProp
       </div>
       <input
         disabled
-        className="text-xs w-20 px-2 py-2 rounded-[var(--radius)] bg-[rgb(var(--panel))] border border-[rgb(var(--border))] opacity-60"
+        className="text-xs w-20 px-2 py-2 rounded-xl bg-black/50 border border-white/10 opacity-60"
         value={String(count)}
         readOnly
       />
@@ -679,7 +690,7 @@ function CtaRegisterRow({ count, disabled, hasCta, onClick }: CtaRegisterRowProp
         type="button"
         disabled={disabled}
         className={cx(
-          "text-[11px] px-3 py-2 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:bg-white/5 w-[130px] text-center",
+          "text-[11px] px-3 py-2 rounded-full border border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10 hover:border-[rgba(234,124,48,0.45)] transition-all w-[130px] text-center",
           disabled ? "opacity-50" : "",
         )}
         onClick={onClick}
@@ -699,8 +710,8 @@ interface WeekPanelProps {
 function WeekPanel({ open, weekRows }: WeekPanelProps) {
   if (!open) return null;
   return (
-    <div className="mt-3 border border-[rgb(var(--border))] rounded-[var(--radius)] overflow-hidden">
-      <div className="p-2 text-xs font-bold border-b border-[rgb(var(--border))] bg-white/5">Semana</div>
+    <div className="mt-3 border border-white/10 rounded-xl overflow-hidden">
+      <div className="px-3 py-2.5 text-xs font-semibold border-b border-white/10 bg-white/[0.025]">Semana</div>
       <div className="p-2 flex flex-col gap-2">
         {weekRows.map((r) => {
           const m = r.metrics;
@@ -711,7 +722,7 @@ function WeekPanel({ open, weekRows }: WeekPanelProps) {
           return (
             <details
               key={r.dateKey}
-              className="rounded-[var(--radius)] border border-[rgb(var(--border))] bg-white/5"
+              className="rounded-xl border border-white/10 bg-white/5"
               open={false}
             >
               <summary className="cursor-pointer list-none p-2 flex items-center justify-between gap-2">
@@ -788,13 +799,13 @@ function CtaRegisterSheet({
         className="absolute inset-0 bg-black/60"
         onClick={() => { if (busy) return; setMismatchConfirm(null); onClose(); }}
       />
-      <div className="relative w-full max-w-[420px] bg-[rgb(var(--panel))] border border-[rgb(var(--border))] rounded-t-[16px] p-3">
+      <div className="relative w-full max-w-[420px] bg-[#09090b] border border-white/10 rounded-t-[16px] p-4 backdrop-blur-xl">
         <div className="flex items-center justify-between gap-2 mb-2">
           <div className="text-sm font-bold">Registrar CTA</div>
           <button
             type="button"
             className={cx(
-              "text-[11px] px-2 py-1 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:bg-white/5",
+              "text-[11px] px-2 py-1 rounded-full border border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10 hover:border-[rgba(234,124,48,0.4)] transition-all",
               busy ? "opacity-50 cursor-not-allowed" : "",
             )}
             onClick={() => { if (busy) return; setMismatchConfirm(null); onClose(); }}
@@ -810,7 +821,7 @@ function CtaRegisterSheet({
               onChange={(e) => setCtaUrl(e.target.value)}
               placeholder="Cole o link do perfil ou da DM..."
               className={cx(
-                "w-full text-xs px-2 py-2 rounded-[var(--radius)] bg-[rgb(var(--panel))] border border-[rgb(var(--border))] outline-none focus:border-[rgb(var(--accent))]",
+                "w-full text-xs px-4 py-2.5 rounded-xl bg-black/50 border border-white/10 outline-none focus:border-[#ea7c30] focus:shadow-[0_0_0_3px_rgba(234,124,48,0.12)] transition-all",
                 !ctaUrl || ctaUrlIsValid ? "" : "border-red-500/60",
               )}
             />
@@ -821,7 +832,7 @@ function CtaRegisterSheet({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              className="text-[11px] px-2 py-2 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:bg-white/5"
+              className="text-[11px] px-3 py-2 rounded-full border border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10 hover:border-[rgba(234,124,48,0.4)] transition-all"
               onClick={() => void onPasteFromActiveTab()}
             >
               Colar da aba atual
@@ -829,7 +840,7 @@ function CtaRegisterSheet({
             <button
               type="button"
               className={cx(
-                "text-[11px] px-2 py-2 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:bg-white/5",
+                "text-[11px] px-3 py-2 rounded-full border border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10 hover:border-[rgba(234,124,48,0.4)] transition-all",
                 !ctaUrl ? "opacity-50 cursor-not-allowed" : "",
               )}
               onClick={() => void onOpenCtaLink()}
@@ -844,11 +855,11 @@ function CtaRegisterSheet({
               value={ctaNote}
               onChange={(e) => setCtaNote(e.target.value)}
               rows={3}
-              className="w-full text-xs px-2 py-2 rounded-[var(--radius)] bg-[rgb(var(--panel))] border border-[rgb(var(--border))] outline-none focus:border-[rgb(var(--accent))]"
+              className="w-full text-xs px-4 py-2.5 rounded-xl bg-black/50 border border-white/10 outline-none focus:border-[#ea7c30] focus:shadow-[0_0_0_3px_rgba(234,124,48,0.12)] transition-all"
             />
           </div>
           {mismatchConfirm ? (
-            <div className="p-2 rounded-[var(--radius)] border border-yellow-500/50 bg-yellow-500/10">
+            <div className="p-2 rounded-xl border border-yellow-500/50 bg-yellow-500/10">
               <div className="text-xs font-bold text-yellow-200 mb-1">Atenção</div>
               <div className="text-[11px] text-yellow-100">Esse link parece ser de outro perfil. Quer salvar mesmo?</div>
               <div className="text-[11px] text-[rgb(var(--muted))] mt-1">
@@ -857,14 +868,14 @@ function CtaRegisterSheet({
               <div className="flex items-center gap-2 mt-2">
                 <button
                   type="button"
-                  className={cx("text-[11px] px-2 py-2 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:bg-white/5", busy ? "opacity-50 cursor-not-allowed" : "")}
+                  className={cx("text-[11px] px-3 py-2 rounded-full border border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10 hover:border-[rgba(234,124,48,0.4)] transition-all", busy ? "opacity-50 cursor-not-allowed" : "")}
                   onClick={() => { if (busy) return; setMismatchConfirm(null); }}
                 >
                   Cancelar
                 </button>
                 <button
                   type="button"
-                  className={cx("text-[11px] px-2 py-2 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:bg-white/5", busy ? "opacity-50 cursor-not-allowed" : "")}
+                  className={cx("text-[11px] px-3 py-2 rounded-full border border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10 hover:border-[rgba(234,124,48,0.4)] transition-all", busy ? "opacity-50 cursor-not-allowed" : "")}
                   onClick={() => void onSaveAndMoveCta(true)}
                 >
                   Salvar mesmo
@@ -876,8 +887,8 @@ function CtaRegisterSheet({
             type="button"
             disabled={disableInputs || busy || !ctaUrlIsValid || !ctaUrl.trim()}
             className={cx(
-              "text-xs font-bold px-3 py-3 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:bg-white/5",
-              disableInputs || busy || !ctaUrlIsValid || !ctaUrl.trim() ? "opacity-50 cursor-not-allowed" : "",
+              "text-xs font-bold px-4 py-3 rounded-full bg-[#ea7c30] text-black border-none neon-button transition-all",
+              disableInputs || busy || !ctaUrlIsValid || !ctaUrl.trim() ? "opacity-50 cursor-not-allowed" : "hover:opacity-90",
             )}
             onClick={() => void onSaveAndMoveCta(false)}
           >
@@ -1305,7 +1316,7 @@ function MetricsPanel({
             type="date"
             value={dateKey}
             onChange={(e) => setDateKey(e.target.value || todayDateKey())}
-            className="text-xs w-full px-3 py-2 rounded-[var(--radius)] bg-[rgb(var(--panel))] border border-[rgb(var(--border))] outline-none focus:border-[rgb(var(--accent))]"
+            className="text-xs w-full px-4 py-2.5 rounded-xl bg-black/50 border border-white/10 outline-none focus:border-[#ea7c30] focus:shadow-[0_0_0_3px_rgba(234,124,48,0.12)] transition-all"
             disabled={busy}
           />
         </div>
@@ -1315,7 +1326,7 @@ function MetricsPanel({
         {isClosed ? (
           <button
             className={cx(
-              "text-xs px-3 py-2 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:bg-white/5",
+              "text-xs px-3 py-2 rounded-full border border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10 hover:border-[rgba(234,124,48,0.45)] transition-all",
               busy ? "opacity-60" : "",
             )}
             onClick={() => void handleReopen()}
@@ -1327,7 +1338,7 @@ function MetricsPanel({
         ) : (
           <button
             className={cx(
-              "text-xs px-3 py-2 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:bg-white/5",
+              "text-xs px-3 py-2 rounded-full border border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10 hover:border-[rgba(234,124,48,0.45)] transition-all",
               busy ? "opacity-60" : "",
             )}
             onClick={() => void handleClose()}
@@ -1347,10 +1358,10 @@ function MetricsPanel({
             <button
               key={opt.value}
               className={cx(
-                "text-xs px-3 py-1 rounded-[var(--radius)] border",
+                "text-xs px-3 py-1.5 rounded-full border transition-all duration-200",
                 board === opt.value
-                  ? "border-[rgb(var(--accent))] bg-white/5"
-                  : "border-[rgb(var(--border))] hover:bg-white/5",
+                  ? "border-[rgba(234,124,48,0.6)] bg-[rgba(234,124,48,0.10)] text-[rgb(var(--accent))]"
+                  : "border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10 hover:border-[rgba(234,124,48,0.4)] hover:text-[rgb(var(--text))]",
               )}
               onClick={() => setBoard(opt.value)}
               disabled={busy}
@@ -1440,7 +1451,7 @@ function MetricsPanel({
             type="button"
             disabled={disableInputs}
             className={cx(
-              "text-[11px] px-3 py-1 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:bg-white/5 w-[130px] text-center",
+              "text-[11px] px-3 py-1.5 rounded-full border border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10 hover:border-[rgba(234,124,48,0.45)] transition-all w-[130px] text-center",
               disableInputs ? "opacity-50" : "",
             )}
             onClick={() => void openCtaSheet("ctaDisparos")}
@@ -1515,7 +1526,7 @@ function MetricsPanel({
           <button
             type="button"
             className={cx(
-              "text-[11px] px-2 py-1 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:bg-white/5",
+              "text-[11px] px-2 py-1 rounded-full border border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10 hover:border-[rgba(234,124,48,0.4)] transition-all",
               !metrics ? "opacity-50 cursor-not-allowed" : "",
             )}
             onClick={() => void handleCopyForSheets()}

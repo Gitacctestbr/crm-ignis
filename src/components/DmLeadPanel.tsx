@@ -37,10 +37,10 @@ type Context = "profile" | "dm";
 // ─── Design tokens (matching theme.css) ─────────────────────────────────────
 
 const C = {
-  panel: "#121216",
-  text: "#f0f0f5",
-  muted: "#787882",
-  border: "#282830",
+  panel: "rgba(12, 12, 14, 0.92)",
+  text: "#f0f0f8",
+  muted: "#6c6c78",
+  border: "rgba(38, 38, 46, 0.85)",
   accent: "#ea7c30",
   radius: "14px",
   danger: "#f87171",
@@ -48,19 +48,20 @@ const C = {
 };
 
 const s = {
-  panel: {
-    position: "fixed" as const,
-    bottom: "20px",
-    right: "20px",
+  // position coords are applied dynamically (draggable); only static props here
+  panelBase: {
     width: "320px",
-    maxHeight: "calc(100vh - 120px)",
+    maxHeight: "calc(100vh - 100px)",
     overflowY: "auto" as const,
     backgroundColor: C.panel,
-    border: `1px solid ${C.border}`,
-    borderRadius: C.radius,
-    padding: "14px",
-    boxShadow: "0 12px 32px rgba(0,0,0,0.55)",
-    backdropFilter: "blur(8px)",
+    border: `1px solid rgba(234, 124, 48, 0.75)`,
+    borderRadius: "16px",
+    padding: "16px",
+    boxShadow:
+      "0 24px 64px rgba(0,0,0,0.70), 0 0 0 1px rgba(234,124,48,0.06), inset 0 1px 0 rgba(255,255,255,0.04)",
+    backdropFilter: "blur(20px)",
+    WebkitBackdropFilter: "blur(20px)",
+    animation: "ignis-panel-pulse 3s ease-in-out infinite",
     fontFamily:
       "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
     fontSize: "12px",
@@ -70,24 +71,25 @@ const s = {
   },
   input: {
     width: "100%",
-    background: "rgba(255,255,255,0.05)",
-    border: `1px solid ${C.border}`,
-    borderRadius: "8px",
+    background: "rgba(0,0,0,0.50)",
+    border: `1px solid rgba(255,255,255,0.10)`,
+    borderRadius: "12px",
     color: C.text,
     fontSize: "12px",
-    padding: "7px 10px",
+    padding: "10px 16px",
     outline: "none",
     fontFamily: "inherit",
     boxSizing: "border-box" as const,
+    transition: "border-color 0.15s, box-shadow 0.15s",
   },
   select: {
     width: "100%",
-    background: "#181820",
-    border: `1px solid ${C.border}`,
-    borderRadius: "8px",
+    background: "rgba(18, 18, 22, 0.95)",
+    border: `1px solid rgba(38, 38, 46, 0.85)`,
+    borderRadius: "10px",
     color: C.text,
     fontSize: "12px",
-    padding: "7px 10px",
+    padding: "8px 12px",
     outline: "none",
     fontFamily: "inherit",
     cursor: "pointer",
@@ -97,34 +99,38 @@ const s = {
     background: C.accent,
     color: "#000",
     border: "none",
-    borderRadius: "8px",
+    borderRadius: "10px",
     fontSize: "12px",
-    padding: "8px 12px",
+    padding: "9px 14px",
     cursor: "pointer",
     fontWeight: 700,
     fontFamily: "inherit",
+    boxShadow: "0 4px 15px rgba(234,124,48,0.4), 0 0 20px rgba(234,124,48,0.2)",
+    transition: "opacity 0.15s, box-shadow 0.15s",
   },
   btnSecondary: {
-    background: "transparent",
+    background: "rgba(255,255,255,0.05)",
     color: C.muted,
-    border: `1px solid ${C.border}`,
-    borderRadius: "8px",
+    border: `1px solid rgba(38, 38, 46, 0.85)`,
+    borderRadius: "10px",
     fontSize: "12px",
-    padding: "8px 12px",
+    padding: "9px 14px",
     cursor: "pointer",
     fontFamily: "inherit",
+    transition: "background 0.15s",
   },
   btnOutline: {
     width: "100%",
-    background: "rgba(234,124,48,0.10)",
-    border: `1px solid ${C.accent}`,
-    borderRadius: "8px",
+    background: "rgba(234,124,48,0.08)",
+    border: `1px solid rgba(234,124,48,0.35)`,
+    borderRadius: "10px",
     color: C.accent,
     fontSize: "12px",
-    padding: "8px",
+    padding: "9px",
     cursor: "pointer",
     fontWeight: 600,
     fontFamily: "inherit",
+    transition: "background 0.15s",
   },
   label: {
     fontSize: "10px",
@@ -132,14 +138,15 @@ const s = {
     marginBottom: "4px",
     display: "block",
     textTransform: "uppercase" as const,
-    letterSpacing: "0.04em",
+    letterSpacing: "0.06em",
+    fontWeight: 600,
   },
   leadRow: {
     display: "flex",
     alignItems: "center",
     gap: "10px",
     padding: "8px 10px",
-    border: `1px solid ${C.border}`,
+    border: `1px solid rgba(38, 38, 46, 0.85)`,
     borderRadius: "10px",
     background: "rgba(255,255,255,0.02)",
     cursor: "pointer",
@@ -149,14 +156,17 @@ const s = {
     fontFamily: "inherit",
     fontSize: "12px",
     boxSizing: "border-box" as const,
+    transition: "border-color 0.15s, background 0.15s",
   },
   badge: {
     fontSize: "9px",
-    padding: "2px 6px",
+    padding: "2px 8px",
     borderRadius: "99px",
-    border: `1px solid ${C.border}`,
-    color: C.muted,
+    border: `1px solid rgba(234,124,48,0.30)`,
+    background: "rgba(234,124,48,0.08)",
+    color: C.accent,
     whiteSpace: "nowrap" as const,
+    fontWeight: 600,
   },
 };
 
@@ -241,25 +251,63 @@ async function rpcCreateLead(input: {
 
 // ─── Subcomponentes ─────────────────────────────────────────────────────────
 
-function PanelHeader({ onClose, subtitle }: { onClose: () => void; subtitle?: string }) {
+function PanelHeader({
+  onClose,
+  subtitle,
+  onHeaderMouseDown,
+}: {
+  onClose: () => void;
+  subtitle?: string;
+  onHeaderMouseDown?: (e: React.MouseEvent<HTMLDivElement>) => void;
+}) {
   return (
     <div
+      onMouseDown={onHeaderMouseDown}
       style={{
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
-        marginBottom: "12px",
+        marginBottom: "14px",
+        paddingBottom: "12px",
+        borderBottom: "1px solid rgba(38,38,46,0.7)",
+        cursor: "grab",
+        userSelect: "none",
       }}
     >
       <div>
+        {/* Drag handle hint */}
+        <div
+          style={{
+            fontSize: "9px",
+            color: "rgba(108,108,120,0.45)",
+            letterSpacing: "0.14em",
+            lineHeight: 1,
+            marginBottom: "4px",
+          }}
+        >
+          ⠿⠿ arrastar
+        </div>
         <div
           style={{
             fontWeight: 800,
-            fontSize: "11px",
+            fontSize: "12px",
             color: C.accent,
-            letterSpacing: "0.06em",
+            letterSpacing: "0.08em",
+            display: "flex",
+            alignItems: "center",
+            gap: "5px",
           }}
         >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill={C.accent}
+            style={{ filter: "drop-shadow(0 0 4px rgba(234,124,48,0.65))", flexShrink: 0 }}
+          >
+            <path d="M12.963 2.286a.75.75 0 00-1.071-.136 9.742 9.742 0 00-3.539 6.177A7.547 7.547 0 016.648 6.61a.75.75 0 00-1.152-.082A9 9 0 1015.68 4.534a7.46 7.46 0 01-2.717-2.248zM15.75 14.25a3.75 3.75 0 11-7.313-1.172c.628.465 1.35.81 2.133 1a5.99 5.99 0 011.925-3.545 3.75 3.75 0 013.255 3.717z" />
+          </svg>
           CRM IGNIS
         </div>
         {subtitle ? (
@@ -270,15 +318,16 @@ function PanelHeader({ onClose, subtitle }: { onClose: () => void; subtitle?: st
       </div>
       <button
         onClick={onClose}
+        onMouseDown={(e) => e.stopPropagation()}
         title="Fechar"
         style={{
-          background: "none",
-          border: "none",
+          background: "rgba(255,255,255,0.07)",
+          border: "1px solid rgba(38,38,46,0.85)",
+          borderRadius: "8px",
           color: C.muted,
           cursor: "pointer",
-          padding: "4px 8px",
-          borderRadius: "6px",
-          fontSize: "14px",
+          padding: "5px 9px",
+          fontSize: "13px",
           lineHeight: 1,
           fontFamily: "inherit",
         }}
@@ -302,21 +351,22 @@ function LeadRow({
       type="button"
       onClick={onClick}
       style={s.leadRow}
-      onMouseEnter={(e) =>
-        ((e.currentTarget as HTMLButtonElement).style.background =
-          "rgba(255,255,255,0.06)")
-      }
-      onMouseLeave={(e) =>
-        ((e.currentTarget as HTMLButtonElement).style.background =
-          "rgba(255,255,255,0.02)")
-      }
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.05)";
+        (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(234,124,48,0.25)";
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.02)";
+        (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(38,38,46,0.85)";
+      }}
     >
       <div
         style={{
           width: "30px",
           height: "30px",
           borderRadius: "999px",
-          background: "rgba(234,124,48,0.15)",
+          background: "rgba(234,124,48,0.12)",
+          border: "1px solid rgba(234,124,48,0.28)",
           color: C.accent,
           display: "grid",
           placeItems: "center",
@@ -403,7 +453,7 @@ function SelectedView({
             fontSize: "11px",
             padding: "3px 10px",
             borderRadius: "99px",
-            border: `1px solid ${state.feedback ? C.accent : C.border}`,
+            border: `1px solid ${state.feedback ? C.accent : "rgba(38,38,46,0.85)"}`,
             color: state.feedback ? C.accent : C.text,
             background: state.feedback
               ? "rgba(234,124,48,0.12)"
@@ -534,15 +584,16 @@ function RegisterView({
               disabled={saving}
               style={{
                 flex: 1,
-                padding: "7px",
-                borderRadius: "8px",
-                border: `1px solid ${board === b ? C.accent : C.border}`,
-                background: board === b ? "rgba(234,124,48,0.12)" : "transparent",
+                padding: "8px",
+                borderRadius: "10px",
+                border: `1px solid ${board === b ? C.accent : "rgba(38,38,46,0.85)"}`,
+                background: board === b ? "rgba(234,124,48,0.12)" : "rgba(255,255,255,0.03)",
                 color: board === b ? C.accent : C.muted,
                 fontSize: "11px",
                 cursor: saving ? "default" : "pointer",
                 fontFamily: "inherit",
                 fontWeight: board === b ? 700 : 500,
+                transition: "border-color 0.15s, background 0.15s",
               }}
             >
               {b === "OUTBOUND" ? "Outbound" : "Social Selling"}
@@ -706,6 +757,70 @@ export function DmLeadPanel({
 
   const [recent, setRecent] = useState<LeadSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  // ─── Drag (posicionamento livre do painel) ───────────────────────────────
+
+  const [pos, setPos] = useState<{ x: number; y: number }>(() => {
+    if (typeof window === "undefined") return { x: 20, y: 20 };
+    return {
+      x: Math.max(0, window.innerWidth - 340),
+      y: Math.max(20, window.innerHeight - 580),
+    };
+  });
+  const [isDragging, setIsDragging] = useState(false);
+  const isDraggingRef = useRef(false);
+  const dragOffsetRef = useRef({ x: 0, y: 0 });
+
+  // Attach global mousemove/mouseup once; use refs to avoid stale closures
+  useEffect(() => {
+    function onMouseMove(e: MouseEvent) {
+      if (!isDraggingRef.current) return;
+      const newX = e.clientX - dragOffsetRef.current.x;
+      const newY = e.clientY - dragOffsetRef.current.y;
+      setPos({
+        x: Math.max(0, Math.min(newX, window.innerWidth - 320)),
+        y: Math.max(0, Math.min(newY, window.innerHeight - 60)),
+      });
+    }
+    function onMouseUp() {
+      if (!isDraggingRef.current) return;
+      isDraggingRef.current = false;
+      setIsDragging(false);
+    }
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, []);
+
+  // Inject CSS keyframes for panel neon-pulse animation into the host page head
+  useEffect(() => {
+    const id = "ignis-panel-pulse-style";
+    if (document.getElementById(id)) return;
+    const style = document.createElement("style");
+    style.id = id;
+    style.textContent = [
+      "@keyframes ignis-panel-pulse {",
+      "  0%, 100% { box-shadow: 0 24px 64px rgba(0,0,0,0.75), 0 0 0 1px rgba(234,124,48,0.30), 0 0 14px rgba(234,124,48,0.22), inset 0 1px 0 rgba(255,255,255,0.05); }",
+      "  50%       { box-shadow: 0 24px 64px rgba(0,0,0,0.75), 0 0 0 1px rgba(234,124,48,0.65), 0 0 40px rgba(234,124,48,0.55), inset 0 1px 0 rgba(255,255,255,0.05); }",
+      "}",
+    ].join("\n");
+    document.head.appendChild(style);
+  }, []);
+
+  function handleHeaderMouseDown(e: React.MouseEvent<HTMLDivElement>) {
+    const target = e.target as HTMLElement;
+    if (target.tagName === "BUTTON" || target.closest("button")) return;
+    e.preventDefault();
+    isDraggingRef.current = true;
+    setIsDragging(true);
+    dragOffsetRef.current = {
+      x: e.clientX - pos.x,
+      y: e.clientY - pos.y,
+    };
+  }
 
   // ─── Carregamento inicial ────────────────────────────────────────────────
 
@@ -926,8 +1041,21 @@ export function DmLeadPanel({
   }, [context, username]);
 
   return (
-    <div style={s.panel}>
-      <PanelHeader onClose={onClose} subtitle={subtitle} />
+    <div
+      style={{
+        position: "fixed",
+        ...s.panelBase,
+        left: `${pos.x}px`,
+        top: `${pos.y}px`,
+        cursor: isDragging ? "grabbing" : "default",
+        userSelect: isDragging ? "none" : "auto",
+      }}
+    >
+      <PanelHeader
+        onClose={onClose}
+        subtitle={subtitle}
+        onHeaderMouseDown={handleHeaderMouseDown}
+      />
 
       {state.kind === "loading" && (
         <div style={{ fontSize: "12px", color: C.muted, padding: "12px 0" }}>
@@ -960,10 +1088,10 @@ export function DmLeadPanel({
                 fontSize: "11px",
                 color: C.muted,
                 marginBottom: "10px",
-                padding: "6px 8px",
-                borderRadius: "8px",
-                background: "rgba(248,113,113,0.08)",
-                border: `1px solid rgba(248,113,113,0.25)`,
+                padding: "6px 10px",
+                borderRadius: "10px",
+                background: "rgba(248,113,113,0.07)",
+                border: "1px solid rgba(248,113,113,0.22)",
               }}
             >
               Lead não cadastrado. Preencha abaixo para criar.

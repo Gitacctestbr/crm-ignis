@@ -119,11 +119,17 @@ function MetricInputImpl({
   }
 
   return (
-    <div className="flex items-center gap-2 py-1">
-      <div className="flex-1">
-        <div className="text-xs">{label}</div>
-        {hint != null ? <div className="text-[11px] text-[rgb(var(--muted))]">{hint}</div> : null}
-        {saveError != null ? <div className="text-[11px] text-red-500 font-mono">{saveError}</div> : null}
+    <div className="flex items-center gap-2 py-2">
+      <div className="flex-1 min-w-0">
+        <div className="text-[10px] uppercase tracking-wider font-semibold text-[rgb(var(--muted))]">
+          {label}
+        </div>
+        {hint != null ? (
+          <div className="text-[10px] text-[rgba(234,124,48,0.75)] font-mono mt-0.5">{hint}</div>
+        ) : null}
+        {saveError != null ? (
+          <div className="text-[10px] text-red-400 font-mono mt-0.5">{saveError}</div>
+        ) : null}
       </div>
 
       <div className="relative">
@@ -132,12 +138,12 @@ function MetricInputImpl({
           pattern="[0-9]*"
           disabled={disabled}
           className={cx(
-            "text-xs w-20 px-2 py-2 rounded-[var(--radius)] bg-[rgb(var(--panel))] border font-mono outline-none transition-colors",
+            "text-sm w-16 px-2 py-1.5 rounded-xl bg-black/50 border font-mono font-bold text-center outline-none transition-all duration-150",
             saveError
               ? "border-red-600 focus:border-red-500"
               : isEditing
-              ? "border-[rgb(var(--accent))]"
-              : "border-[rgb(var(--border))] focus:border-[rgb(var(--accent))]",
+              ? "border-[#ea7c30] shadow-[0_0_0_3px_rgba(234,124,48,0.18)]"
+              : "border-white/10 focus:border-[#ea7c30] focus:shadow-[0_0_0_3px_rgba(234,124,48,0.12)]",
             disabled ? "opacity-60" : "",
           )}
           value={localValue}
@@ -146,8 +152,8 @@ function MetricInputImpl({
           onBlur={handleBlur}
         />
         {isSaving && (
-          <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[rgb(var(--muted))] text-[10px] font-mono pointer-events-none">
-            •••
+          <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[rgba(234,124,48,0.8)] text-[9px] font-mono pointer-events-none">
+            ●
           </span>
         )}
       </div>
@@ -156,7 +162,8 @@ function MetricInputImpl({
         type="button"
         disabled={disabled}
         className={cx(
-          "text-[11px] px-2 py-2 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:bg-white/5",
+          "text-[10px] w-8 h-8 rounded-full border border-white/10 bg-white/5 font-bold transition-all duration-150",
+          "hover:border-[rgba(234,124,48,0.55)] hover:bg-[rgba(234,124,48,0.10)] hover:text-[rgb(var(--accent))]",
           disabled ? "opacity-50" : "",
         )}
         onClick={onInc1}
@@ -169,7 +176,8 @@ function MetricInputImpl({
         type="button"
         disabled={disabled}
         className={cx(
-          "text-[11px] px-2 py-2 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:bg-white/5",
+          "text-[10px] w-8 h-8 rounded-full border border-white/10 bg-white/5 font-bold transition-all duration-150",
+          "hover:border-[rgba(234,124,48,0.55)] hover:bg-[rgba(234,124,48,0.10)] hover:text-[rgb(var(--accent))]",
           disabled ? "opacity-50" : "",
         )}
         onClick={onInc5}

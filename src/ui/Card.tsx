@@ -10,10 +10,16 @@ export function Card({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-[var(--radius)] border border-[rgb(var(--border))] bg-[rgb(var(--panel))] shadow-[var(--shadow-sm)] p-3">
-      {title && <div className="text-sm font-semibold">{title}</div>}
-      {subtitle && <div className="text-xs text-[rgb(var(--muted))] mt-1">{subtitle}</div>}
-      {children && <div className="mt-3">{children}</div>}
+    <div className="rounded-xl border border-white/10 bg-white/5 backdrop-blur-sm shadow-[var(--shadow-md)] p-4 transition-all duration-300 hover:border-[rgba(234,124,48,0.25)]">
+      {title && (
+        <div className="text-[10px] font-semibold uppercase tracking-widest text-[rgb(var(--muted))] mb-3">
+          {title}
+        </div>
+      )}
+      {subtitle && (
+        <div className="text-xs text-[rgb(var(--muted))] -mt-2 mb-3">{subtitle}</div>
+      )}
+      {children && <div className={title || subtitle ? "mt-2" : ""}>{children}</div>}
     </div>
   );
 }

@@ -3,7 +3,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import type { BoardType } from "../../src/db/db";
 import { deleteLead, listLeadsByBoard, moveLeadStage, updateLead } from "../../src/db/leadsRepo";
 import { BackupRestorePanel } from "../../src/ui/BackupRestorePanel";
-import { STAGES as CRM_STAGES, normalizeStageId } from "../../src/crm/stages";
+import { STAGES as CRM_STAGES, normalizeStageId, stageLabel } from "../../src/crm/stages";
 
 const WORKSPACE_ID = "default";
 
@@ -141,33 +141,30 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[rgb(var(--bg))] text-[rgb(var(--text))]">
-      <div className="sticky top-0 z-10 border-b border-[rgb(var(--border))] bg-[rgb(var(--bg))]/80 backdrop-blur">
-        <div className="w-full px-3 md:px-4 py-3 flex items-center gap-3">
-          <div className="font-black tracking-tight text-lg">CRM IGNIS • Kanban</div>
+      {/* ── Topbar ── */}
+      <div className="sticky top-0 z-10 border-b border-[rgb(var(--border))]/60 bg-[rgb(var(--bg))]/90 backdrop-blur-md">
+        <div className="w-full px-4 py-3 flex items-center gap-3 flex-wrap">
+          <div className="font-black tracking-tight text-base">
+            <span className="text-[rgb(var(--accent))]">IGNIS</span>
+            <span className="text-[rgb(var(--muted))]/60 font-normal mx-1">•</span>
+            <span className="font-normal text-sm text-[rgb(var(--muted))]">Kanban</span>
+          </div>
 
-          <div className="flex items-center gap-2 ml-2">
-            <button
-              className={
-                "text-xs px-3 py-1 rounded-[var(--radius)] border " +
-                (board === "OUTBOUND"
-                  ? "border-[rgb(var(--accent))] bg-white/5"
-                  : "border-[rgb(var(--border))] hover:bg-white/5")
-              }
-              onClick={() => setBoard("OUTBOUND")}
-            >
-              Outbound
-            </button>
-            <button
-              className={
-                "text-xs px-3 py-1 rounded-[var(--radius)] border " +
-                (board === "SOCIAL"
-                  ? "border-[rgb(var(--accent))] bg-white/5"
-                  : "border-[rgb(var(--border))] hover:bg-white/5")
-              }
-              onClick={() => setBoard("SOCIAL")}
-            >
-              Social Selling
-            </button>
+          <div className="flex items-center gap-1.5 ml-2">
+            {(["OUTBOUND", "SOCIAL"] as BoardType[]).map((b) => (
+              <button
+                key={b}
+                className={
+                  "text-xs px-3 py-1.5 rounded-[var(--radius)] border transition-all duration-200 " +
+                  (board === b
+                    ? "border-[rgba(234,124,48,0.5)] bg-[rgba(234,124,48,0.1)] text-[rgb(var(--accent))] font-semibold shadow-[0_0_12px_rgba(234,124,48,0.15)]"
+                    : "border-[rgb(var(--border))] text-[rgb(var(--muted))] hover:border-[rgba(234,124,48,0.3)] hover:text-[rgb(var(--text))] hover:bg-white/5")
+                }
+                onClick={() => setBoard(b)}
+              >
+                {b === "OUTBOUND" ? "Outbound" : "Social Selling"}
+              </button>
+            ))}
           </div>
 
           <div className="flex-1" />
@@ -176,7 +173,7 @@ export default function App() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar @username…"
-            className="text-xs w-[260px] max-w-[45vw] px-3 py-2 rounded-[var(--radius)] bg-[rgb(var(--panel))] border border-[rgb(var(--border))] outline-none focus:border-[rgb(var(--accent))]"
+            className="text-xs w-[220px] max-w-[40vw] px-3 py-1.5 rounded-[var(--radius)] bg-white/5 border border-[rgb(var(--border))] outline-none focus:border-[rgb(var(--accent))] focus:shadow-[0_0_0_2px_rgba(234,124,48,0.1)] transition-all placeholder:text-[rgb(var(--muted))]/50"
           />
 
           <input
@@ -184,11 +181,11 @@ export default function App() {
             value={dayFilter}
             onChange={(e) => setDayFilter(e.target.value)}
             title="Mostra somente leads adicionados no dia selecionado"
-            className="text-xs w-[170px] max-w-[40vw] px-3 py-2 rounded-[var(--radius)] bg-[rgb(var(--panel))] border border-[rgb(var(--border))] outline-none focus:border-[rgb(var(--accent))]"
+            className="text-xs w-[150px] max-w-[35vw] px-3 py-1.5 rounded-[var(--radius)] bg-white/5 border border-[rgb(var(--border))] outline-none focus:border-[rgb(var(--accent))] transition-all"
           />
 
           <button
-            className="text-xs px-3 py-2 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:bg-white/5"
+            className="text-xs px-3 py-1.5 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:border-[rgba(234,124,48,0.35)] hover:bg-white/5 transition-all"
             onClick={() => setDayFilter(todayAsInputDate())}
             title="Filtrar por hoje"
           >
@@ -197,7 +194,7 @@ export default function App() {
 
           {dayFilter ? (
             <button
-              className="text-xs px-3 py-2 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:bg-white/5"
+              className="text-xs px-3 py-1.5 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:bg-white/5 transition-all"
               onClick={() => setDayFilter("")}
               title="Remover filtro de dia"
             >
@@ -206,7 +203,7 @@ export default function App() {
           ) : null}
 
           <button
-            className="text-xs px-3 py-2 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:bg-white/5"
+            className="text-xs px-3 py-1.5 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:bg-white/5 transition-all"
             onClick={() => setShowBackup((v) => !v)}
             title="Abrir/Fechar Backup"
           >
@@ -215,15 +212,16 @@ export default function App() {
         </div>
 
         {dayLabel ? (
-          <div className="px-3 md:px-4 pb-3 -mt-1 text-[11px] text-[rgb(var(--muted))]">
-            Mostrando leads adicionados em <span className="font-bold">{dayLabel}</span>
+          <div className="px-4 pb-2 -mt-1 text-[11px] text-[rgb(var(--muted))]">
+            Leads de <span className="font-bold text-[rgb(var(--text))]">{dayLabel}</span>
           </div>
         ) : null}
       </div>
 
-      <div className="w-full px-3 md:px-4 py-4">
+      {/* ── Board ── */}
+      <div className="w-full px-4 py-5">
         {showBackup ? (
-          <div className="mb-4">
+          <div className="mb-5">
             <BackupRestorePanel />
           </div>
         ) : null}
@@ -250,21 +248,22 @@ export default function App() {
           </div>
         </div>
 
-        <div className="text-xs text-[rgb(var(--muted))] mt-2">
-          Arraste o card para outra coluna para mudar o estágio. A nota rápida fica sempre visível.
+        <div className="text-[11px] text-[rgb(var(--muted))]/60 mt-1">
+          Arraste o card para outra coluna para mover o estágio.
         </div>
       </div>
 
+      {/* ── Toast ── */}
       {toast ? (
         <div className="fixed right-4 bottom-4 z-50">
           <div
             className={
-              "text-xs font-bold px-3 py-2 rounded-[var(--radius)] border shadow-[var(--shadow-sm)] backdrop-blur " +
+              "text-xs font-semibold px-4 py-2.5 rounded-[var(--radius)] border shadow-[var(--shadow-md)] backdrop-blur-md " +
               (toast.kind === "error"
-                ? "bg-red-500/20 border-red-500/30"
+                ? "bg-red-500/15 border-red-500/25 text-red-200"
                 : toast.kind === "warn"
-                  ? "bg-yellow-500/15 border-yellow-500/25"
-                  : "bg-emerald-500/15 border-emerald-500/25")
+                  ? "bg-yellow-500/10 border-yellow-500/20 text-yellow-200"
+                  : "bg-emerald-500/10 border-emerald-500/20 text-emerald-200")
             }
           >
             {toast.message}
@@ -301,20 +300,25 @@ function KanbanColumn(props: {
 
   return (
     <div
-      className="w-[320px] shrink-0 rounded-[var(--radius)] bg-[rgb(var(--panel))] border border-[rgb(var(--border))] shadow-[var(--shadow-sm)]"
+      className="w-[280px] shrink-0 rounded-[var(--radius)] bg-[rgb(var(--panel))]/60 backdrop-blur-sm border border-[rgb(var(--border))]/80 shadow-[var(--shadow-sm)] flex flex-col"
       onDragOver={onDragOver}
       onDrop={onDrop}
     >
-      <div className="px-3 py-2 border-b border-[rgb(var(--border))] flex items-center gap-2">
-        <div className="text-xs font-extrabold">{props.title}</div>
-        <div className="text-[10px] px-2 py-0.5 rounded-full border border-[rgb(var(--border))] text-[rgb(var(--muted))]">
+      {/* Column header */}
+      <div className="px-3 py-2.5 border-b border-[rgb(var(--border))]/60 flex items-center gap-2">
+        <div className="w-[3px] h-3.5 rounded-full bg-[rgba(234,124,48,0.55)] shrink-0" />
+        <div className="text-[11px] font-bold flex-1 truncate">{props.title}</div>
+        <div className="text-[10px] tabular-nums px-1.5 py-0.5 rounded-full bg-white/5 border border-[rgb(var(--border))]/60 text-[rgb(var(--muted))]">
           {props.items.length}
         </div>
       </div>
 
-      <div className="p-3 flex flex-col gap-2 min-h-[90px]">
+      {/* Cards */}
+      <div className="p-2 flex flex-col gap-1.5 min-h-[80px]">
         {props.items.length === 0 ? (
-          <div className="text-xs text-[rgb(var(--muted))]">Solte cards aqui…</div>
+          <div className="text-[10px] text-[rgb(var(--muted))]/40 text-center py-5">
+            Solte aqui
+          </div>
         ) : null}
 
         {props.items.map((l) => (
@@ -350,55 +354,59 @@ function LeadCard(props: {
   }
 
   const firstLetter = (String(lead.username || "?")[0] || "?").toUpperCase();
+  const stage = stageLabel(normalizeStageId(String(lead.stageId || "")));
 
   return (
     <div
-      className="rounded-[var(--radius)] bg-white/5 border border-[rgb(var(--border))] p-3 cursor-grab active:cursor-grabbing"
+      className="group rounded-[var(--radius)] bg-white/[0.03] border border-[rgb(var(--border))]/80 p-2.5 cursor-grab active:cursor-grabbing transition-all duration-200 hover:border-[rgba(234,124,48,0.45)] hover:bg-white/[0.05] hover:shadow-[0_0_0_1px_rgba(234,124,48,0.08),0_4px_16px_rgba(234,124,48,0.05)]"
       draggable
       onDragStart={(e) => {
         e.dataTransfer.setData("text/leadId", lead.id);
         e.dataTransfer.effectAllowed = "move";
       }}
     >
-      <div className="flex items-start gap-2">
+      {/* ── 1. Nome / Avatar ── */}
+      <div className="flex items-center gap-2">
         <button
           type="button"
           className="shrink-0"
           onClick={() => openInstagramProfile(lead.username)}
           title="Abrir perfil no Instagram"
         >
-          <div className="w-9 h-9 rounded-full border border-[rgb(var(--border))] bg-white/5 grid place-items-center text-[11px] font-black">
+          <div className="w-8 h-8 rounded-full border border-[rgba(234,124,48,0.3)] bg-[rgba(234,124,48,0.1)] grid place-items-center text-[11px] font-black text-[rgb(var(--accent))]">
             {firstLetter}
           </div>
         </button>
 
-        <div className="flex-1">
-          <div className="text-xs font-extrabold">
-            <a
-              className="hover:underline"
-              href={`https://www.instagram.com/${String(lead.username || "").replace(/^@+/, "").trim()}/`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              @{lead.username}
-            </a>
-          </div>
+        <div className="flex-1 min-w-0">
+          {/* ── 2. Status / Empresa ── */}
+          <a
+            className="block text-xs font-bold truncate hover:text-[rgb(var(--accent))] transition-colors"
+            href={`https://www.instagram.com/${String(lead.username || "").replace(/^@+/, "").trim()}/`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            @{lead.username}
+          </a>
           {lead.displayName ? (
-            <div className="text-[11px] text-[rgb(var(--muted))]">{lead.displayName}</div>
+            <div className="text-[10px] text-[rgb(var(--muted))] truncate">{lead.displayName}</div>
           ) : null}
+          <div className="text-[9px] mt-0.5 inline-flex items-center px-1.5 py-[1px] rounded-full border border-[rgb(var(--border))]/60 text-[rgb(var(--muted))]/70">
+            {stage}
+          </div>
         </div>
 
         <button
-          className="text-[11px] px-2 py-1 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:bg-white/5"
+          className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] px-1.5 py-1 rounded border border-[rgb(var(--border))]/60 text-[rgb(var(--muted))]/70 hover:border-red-500/40 hover:text-red-400 hover:bg-red-500/10"
           onClick={props.onDelete}
           title="Remover lead"
         >
-          Remover
+          ✕
         </button>
       </div>
 
+      {/* ── 3. Próximo passo (nota rápida) ── */}
       <div className="mt-2">
-        <div className="text-[10px] text-[rgb(var(--muted))] mb-1">Nota rápida</div>
         <textarea
           value={notes}
           onChange={(e) => {
@@ -406,8 +414,8 @@ function LeadCard(props: {
             setNotes(v);
             scheduleSave(v);
           }}
-          placeholder="Digite uma nota…"
-          className="w-full text-xs min-h-[56px] max-h-[140px] resize-y px-2 py-2 rounded-[var(--radius)] bg-[rgb(var(--bg))]/40 border border-[rgb(var(--border))] outline-none focus:border-[rgb(var(--accent))]"
+          placeholder="Próximo passo…"
+          className="w-full text-[11px] min-h-[40px] max-h-[120px] resize-y px-2 py-1.5 rounded-lg bg-[rgb(var(--bg))]/50 border border-[rgb(var(--border))]/50 outline-none focus:border-[rgba(234,124,48,0.4)] transition-colors placeholder:text-[rgb(var(--muted))]/40"
         />
       </div>
     </div>
