@@ -1,0 +1,14 @@
+:root {
+  --bg: 12 12 14;
+  --panel: 18 18 22;
+  --muted: 120 120 130;
+  --text: 240 240 245;
+  --border: 40 40 48;
+
+  /* Accent IGNIS (fire contido) */
+  --accent: 234 124 48;
+
+  --radius: 14px;
+  --shadow-sm: 0 6px 18px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 10px 28px rgba(0, 0, 0, 0.35);
+}
