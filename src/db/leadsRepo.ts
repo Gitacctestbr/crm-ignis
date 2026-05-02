@@ -83,7 +83,8 @@ export async function addLead(input: {
   if (input.board !== "OUTBOUND" && input.board !== "SOCIAL") throw new Error("board inválido");
 
   const cleanAvatar =
-    typeof input.avatarUrl === "string" && input.avatarUrl.startsWith("http")
+    typeof input.avatarUrl === "string" &&
+    (input.avatarUrl.startsWith("http") || input.avatarUrl.startsWith("data:"))
       ? input.avatarUrl
       : undefined;
 

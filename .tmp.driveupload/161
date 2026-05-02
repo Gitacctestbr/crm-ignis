@@ -1,0 +1,11 @@
+0000000000000000000000000000000000000000 cecf619a7178644e779651d50e146f03203fb329 GustavoBonifacio <gustavobonifacio.2023@gmail.com> 1767563153 -0300	commit (initial): Initial commit
+cecf619a7178644e779651d50e146f03203fb329 0000000000000000000000000000000000000000 GustavoBonifacio <gustavobonifacio.2023@gmail.com> 1767563200 -0300	Branch: renamed refs/heads/master to refs/heads/main
+0000000000000000000000000000000000000000 cecf619a7178644e779651d50e146f03203fb329 GustavoBonifacio <gustavobonifacio.2023@gmail.com> 1767563200 -0300	Branch: renamed refs/heads/master to refs/heads/main
+cecf619a7178644e779651d50e146f03203fb329 0806e7e2a8823defefc05ef9590d94a9c0bdea30 GustavoBonifacio <gustavobonifacio.2023@gmail.com> 1767564469 -0300	commit: Fix WXT dev build
+0806e7e2a8823defefc05ef9590d94a9c0bdea30 584f4000b5ddeec492827a4b10aff920ceb26ac0 GustavoBonifacio <gustavobonifacio.2023@gmail.com> 1767575778 -0300	commit: Kanban funcionando
+584f4000b5ddeec492827a4b10aff920ceb26ac0 ffebc9d0f7af0acbbb4981e2243e801723508682 GustavoBonifacio <gustavobonifacio.2023@gmail.com> 1777063700 -0300	commit: update: sincronizando versao atualizada
+ffebc9d0f7af0acbbb4981e2243e801723508682 23127c9984e3f47fdb3cdf0460ceb990981ec3e3 GustavoBonifacio <gustavobonifacio.2023@gmail.com> 1777063930 -0300	commit: update: sincronizando versao atualizada
+23127c9984e3f47fdb3cdf0460ceb990981ec3e3 90b0f6dda5c10d6e215b4d11e21ee7c15c010821 GustavoBonifacio <gustavobonifacio.2023@gmail.com> 1777674781 -0300	commit: update: versao-funcional-2.0 do repositorio ignis
+90b0f6dda5c10d6e215b4d11e21ee7c15c010821 90b0f6dda5c10d6e215b4d11e21ee7c15c010821 GustavoBonifacio <gustavobonifacio.2023@gmail.com> 1777675655 -0300	reset: moving to HEAD
+90b0f6dda5c10d6e215b4d11e21ee7c15c010821 358cb8c79269ab711540f4f9e5fbdb457aed6d4b GustavoBonifacio <gustavobonifacio.2023@gmail.com> 1777676432 -0300	checkout: moving from main to versao-3.0-master
+358cb8c79269ab711540f4f9e5fbdb457aed6d4b 358cb8c79269ab711540f4f9e5fbdb457aed6d4b GustavoBonifacio <gustavobonifacio.2023@gmail.com> 1777699089 -0300	checkout: moving from versao-3.0-master to feat/foto-perfil-100-funciona

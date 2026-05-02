@@ -12,9 +12,11 @@ import {
   upsertDailyMetricsGuarded,
 } from "../db/metricsRepo";
 import { parseInstagramUsername } from "../instagram/parseInstagram";
+import { fetchAvatarFromActiveTab } from "../instagram/avatarFetcher";
 import { normalizeStageId, stageLabel } from "../crm/stages";
 import { BackupRestorePanel } from "../ui/BackupRestorePanel";
 import { ExtensionSettingsPanel } from "../ui/ExtensionSettingsPanel";
+import { LeadAvatar } from "../ui/LeadAvatar";
 import { MetricInput } from "../ui/MetricInput";
 
 type Tab = "Outbound" | "Social" | "Tasks" | "Filtros" | "Métricas" | "Settings";
@@ -325,12 +327,24 @@ export function SidePanelApp() {
       return;
     }
 
+    // Aba ativa é o perfil — pede avatar via web_profile_info no content script.
+    // Falha silenciosa: se a foto não vier, lead é criado sem foto e o backfill
+    // assume depois.
+    let avatarUrl: string | undefined;
+    try {
+      const meta = await fetchAvatarFromActiveTab();
+      if (meta?.avatarUrl) avatarUrl = meta.avatarUrl;
+    } catch {
+      /* sem foto, segue */
+    }
+
     try {
       const result = await addLead({
         workspaceId,
         board: activeBoard,
         stageId: "LEADS_NOVOS",
         username: parsed.username,
+        avatarUrl,
       });
 
       if (result.status === "created") toast(`✅ Capturado: @${result.lead.username}`);
@@ -495,17 +509,20 @@ export function SidePanelApp() {
 
             <div className="p-3 flex flex-col gap-2.5">
               {filtered.map((l) => {
-                const firstLetter = (String(l.username || "?")[0] || "?").toUpperCase();
-
                 return (
                   <div
                     key={l.id}
                     className="p-3 rounded-xl border border-white/10 bg-white/5 transition-all duration-200 hover:border-[rgba(234,124,48,0.28)] hover:bg-white/[0.07]"
                   >
                     <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full border border-[rgba(234,124,48,0.3)] bg-[rgba(234,124,48,0.08)] grid place-items-center text-[10px] font-black text-[rgb(var(--accent))]">
-                        {firstLetter}
-                      </div>
+                      <LeadAvatar
+                        username={l.username}
+                        avatarUrl={l.avatarUrl}
+                        size={32}
+                        bgColor="rgba(234,124,48,0.08)"
+                        onClick={() => openInstagramProfile(l.username)}
+                        title="Abrir perfil no Instagram"
+                      />
 
                       <div className="flex-1">
                         <button

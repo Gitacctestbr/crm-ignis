@@ -24,7 +24,7 @@ export default defineBackground(() => {
   chrome.runtime.onMessage.addListener((message: any, _sender, sendResponse) => {
     // === CAPTURA LEAD ===
     if (message?.type === "CRM_IGNIS_CAPTURE") {
-      const { board, stageId, username, displayName } = message.payload || {};
+      const { board, stageId, username, displayName, avatarUrl } = message.payload || {};
 
       (async () => {
         const repo = await import("../src/db/leadsRepo");
@@ -36,6 +36,7 @@ export default defineBackground(() => {
           stageId: stageId || "LEADS_NOVOS",
           username: normalizeUsername(username || ""),
           displayName: displayName || undefined,
+          avatarUrl: typeof avatarUrl === "string" ? avatarUrl : undefined,
         });
 
         // 2. Broadcast — só depois do commit no IndexedDB
@@ -83,6 +84,7 @@ export default defineBackground(() => {
             notes: lead.notes || "",
             board: lead.board,
             nextFollowUpAt: lead.nextFollowUpAt,
+            avatarUrl: lead.avatarUrl ?? null,
           },
         });
       })().catch((err) => {
@@ -113,6 +115,7 @@ export default defineBackground(() => {
             displayName: l.displayName || "",
             stageId: l.stageId,
             board: l.board,
+            avatarUrl: l.avatarUrl ?? null,
           })),
         });
       })().catch((err) => {
@@ -142,6 +145,7 @@ export default defineBackground(() => {
             displayName: l.displayName || "",
             stageId: l.stageId,
             board: l.board,
+            avatarUrl: l.avatarUrl ?? null,
           })),
         });
       })().catch((err) => {
@@ -171,6 +175,7 @@ export default defineBackground(() => {
             stageId: patch.stageId,
             notes: typeof patch.notes === "string" ? patch.notes : undefined,
             nextFollowUpAt: typeof patch.nextFollowUpAt === "number" ? patch.nextFollowUpAt : undefined,
+            avatarUrl: typeof patch.avatarUrl === "string" ? patch.avatarUrl : undefined,
           },
         });
 

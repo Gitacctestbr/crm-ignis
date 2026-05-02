@@ -4,6 +4,10 @@ import { createRoot, type Root } from "react-dom/client";
 import { DmLeadPanel } from "../src/components/DmLeadPanel";
 import { isDMRoute } from "../src/instagram/parseInstagram";
 import {
+  fetchAvatarAsDataUrl,
+  extractAvatarUrlFallback,
+} from "../src/instagram/avatarScraper";
+import {
   DEFAULT_SETTINGS,
   loadSettings,
   subscribeSettings,
@@ -345,32 +349,77 @@ export default defineContentScript({
           try {
             const username = getUsernameFromUrl();
             if (!username) {
+              console.log("[CRM IGNIS][avatar] GET_PROFILE_META — não é perfil");
               sendResponse({ ok: false, reason: "Não é página de perfil." });
               return;
             }
 
-            const apiAvatar = await fetchAvatarViaWebProfileInfo(username);
-            const fallbackAvatar = apiAvatar || extractAvatarUrlFallback(username);
+            console.log("[CRM IGNIS][avatar] GET_PROFILE_META start:", username);
+            const dataUrl = await fetchAvatarAsDataUrl(username);
+            const finalAvatar = dataUrl || extractAvatarUrlFallback(username);
 
-            console.log("[CRM IGNIS] avatar capturado:", fallbackAvatar ? "SIM" : "NÃO", {
+            console.log(
+              "[CRM IGNIS][avatar] GET_PROFILE_META done:",
               username,
-              via: apiAvatar ? "api/v1/users/web_profile_info" : "fallback",
-            });
+              "→",
+              finalAvatar
+                ? finalAvatar.startsWith("data:")
+                  ? `data URL (${Math.round(finalAvatar.length / 1024)}KB)`
+                  : `URL crua (${finalAvatar.slice(0, 40)}…)`
+                : "<null>",
+            );
 
-            sendResponse({ ok: true, username, avatarUrl: fallbackAvatar });
+            sendResponse({ ok: true, username, avatarUrl: finalAvatar });
           } catch (e: any) {
-            console.error("[CRM IGNIS] erro ao pegar avatar:", e);
+            console.error("[CRM IGNIS][avatar] GET_PROFILE_META erro:", e);
             sendResponse({ ok: false, reason: e?.message || String(e) });
           }
         })();
 
         return true; // resposta async
       }
+
+      // Avatar para um username arbitrário — chamado pelo sidepanel/dashboard/popup
+      // através de qualquer aba do IG aberta. Diferente do META acima, não exige
+      // que a aba esteja no perfil daquele username — usa só o endpoint web_profile_info.
+      if (type === "CRM_IGNIS_FETCH_AVATAR") {
+        (async () => {
+          try {
+            const raw = String((msg as any)?.payload?.username || "")
+              .trim()
+              .replace(/^@+/, "");
+            if (!raw || !/^[a-zA-Z0-9._]+$/.test(raw)) {
+              console.warn("[CRM IGNIS][avatar] FETCH_AVATAR username inválido:", raw);
+              sendResponse({ ok: false, reason: "username inválido" });
+              return;
+            }
+
+            console.log("[CRM IGNIS][avatar] FETCH_AVATAR start:", raw);
+            const dataUrl = await fetchAvatarAsDataUrl(raw);
+            console.log(
+              "[CRM IGNIS][avatar] FETCH_AVATAR done:",
+              raw,
+              "→",
+              dataUrl
+                ? dataUrl.startsWith("data:")
+                  ? `data URL (${Math.round(dataUrl.length / 1024)}KB)`
+                  : `URL crua (${dataUrl.slice(0, 40)}…)`
+                : "<null>",
+            );
+            sendResponse({ ok: true, username: raw, avatarUrl: dataUrl });
+          } catch (e: any) {
+            console.error("[CRM IGNIS][avatar] FETCH_AVATAR erro:", e);
+            sendResponse({ ok: false, reason: e?.message || String(e) });
+          }
+        })();
+
+        return true;
+      }
     });
   },
 });
 
-// ─── Helpers de URL e avatar (preservados da v1) ────────────────────────────
+// ─── Helpers de URL ─────────────────────────────────────────────────────────
 
 const RESERVED = new Set([
   "explore",
@@ -387,140 +436,6 @@ const RESERVED = new Set([
   "channel",
   "ar",
 ]);
-
-async function fetchAvatarViaWebProfileInfo(username: string): Promise<string | null> {
-  const url = `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(
-    username,
-  )}`;
-
-  const csrf = getCookie("csrftoken");
-
-  try {
-    const res = await fetch(url, {
-      method: "GET",
-      credentials: "include",
-      headers: {
-        Accept: "application/json",
-        "X-Requested-With": "XMLHttpRequest",
-        "X-IG-App-ID": "936619743392459",
-        ...(csrf ? { "X-CSRFToken": csrf } : {}),
-      },
-    });
-
-    console.log("[CRM IGNIS] web_profile_info status:", res.status);
-
-    if (!res.ok) return null;
-
-    const json = await res.json();
-
-    const pic =
-      json?.data?.user?.profile_pic_url_hd ||
-      json?.data?.user?.profile_pic_url ||
-      null;
-
-    return cleanUrl(pic);
-  } catch (e) {
-    console.log("[CRM IGNIS] web_profile_info fetch falhou:", e);
-    return null;
-  }
-}
-
-function extractAvatarUrlFallback(username: string): string | null {
-  const meta =
-    getMeta("meta[property='og:image']") ||
-    getMeta("meta[name='twitter:image']") ||
-    getMeta("meta[property='og:image:secure_url']");
-
-  const metaClean = cleanUrl(meta);
-  if (metaClean) return metaClean;
-
-  const dom = getAvatarFromDom(username);
-  const domClean = cleanUrl(dom);
-  if (domClean) return domClean;
-
-  const html = document.documentElement?.innerHTML || "";
-  const fromJson =
-    matchInHtml(html, /"profile_pic_url_hd":"([^"]+)"/) ||
-    matchInHtml(html, /"profile_pic_url":"([^"]+)"/);
-
-  return cleanUrl(fromJson);
-}
-
-function getMeta(selector: string): string | null {
-  const el = document.querySelector(selector) as HTMLMetaElement | null;
-  const v = el?.content?.trim();
-  return v ? v : null;
-}
-
-function getAvatarFromDom(username: string): string | null {
-  const root = document.querySelector("main") || document.body;
-  const imgs = Array.from(root.querySelectorAll("img"))
-    .map((img) => ({
-      src: (img.getAttribute("src") || "").trim(),
-      alt: (img.getAttribute("alt") || "").toLowerCase(),
-      width: Number(img.getAttribute("width") || "0"),
-      height: Number(img.getAttribute("height") || "0"),
-    }))
-    .filter((x) => x.src.startsWith("http"));
-
-  if (imgs.length === 0) return null;
-
-  const u = username.toLowerCase();
-
-  const bestAlt = imgs.find(
-    (x) =>
-      (x.alt.includes("perfil") || x.alt.includes("profile")) &&
-      (x.alt.includes(u) || x.alt.includes(`@${u}`)),
-  );
-  if (bestAlt?.src) return bestAlt.src;
-
-  const profileAlt = imgs.find(
-    (x) =>
-      x.alt.includes("perfil") ||
-      x.alt.includes("profile picture") ||
-      x.alt.includes("foto do perfil") ||
-      x.alt.includes("profile photo"),
-  );
-  if (profileAlt?.src) return profileAlt.src;
-
-  const biggest = imgs
-    .slice()
-    .sort((a, b) => (b.width * b.height || 0) - (a.width * a.height || 0))[0];
-
-  return biggest?.src || null;
-}
-
-function matchInHtml(html: string, re: RegExp): string | null {
-  const m = html.match(re);
-  if (!m?.[1]) return null;
-
-  const raw = m[1];
-  const decoded = raw
-    .replace(/\\u0026/g, "&")
-    .replace(/\\\//g, "/")
-    .replace(/&amp;/g, "&");
-
-  return decoded;
-}
-
-function cleanUrl(url: any): string | null {
-  if (typeof url !== "string") return null;
-  const trimmed = url.trim();
-  if (!trimmed.startsWith("http")) return null;
-
-  const txt = document.createElement("textarea");
-  txt.innerHTML = trimmed;
-  const decoded = txt.value.trim();
-
-  return decoded.startsWith("http") ? decoded : null;
-}
-
-function getCookie(name: string): string | null {
-  const m = document.cookie.match(
-    new RegExp(`(?:^|; )${name.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&")}=([^;]*)`),
-  );
-  return m ? decodeURIComponent(m[1]) : null;
-}
 
 function getUsernameFromUrl(): string | null {
   const path = location.pathname.replace(/\/+$/, "");

@@ -1,0 +1,22 @@
+[core]
+	repositoryformatversion = 0
+	filemode = false
+	bare = false
+	logallrefupdates = true
+	symlinks = false
+	ignorecase = true
+[remote "origin"]
+	url = https://github.com/GustavoBonifacio/CRM-Ignis.git
+	fetch = +refs/heads/*:refs/remotes/origin/*
+[branch "main"]
+	remote = origin
+	merge = refs/heads/main
+[remote "ignis"]
+	url = https://github.com/Gitacctestbr/crm-ignis.git
+	fetch = +refs/heads/*:refs/remotes/ignis/*
+[branch "versao-3.0-master"]
+	remote = ignis
+	merge = refs/heads/versao-3.0-master
+	vscode-merge-base = ignis/versao-3.0-master
+[branch "feat/foto-perfil-100-funciona"]
+	vscode-merge-base = ignis/versao-3.0-master
