@@ -19,6 +19,11 @@ export default defineConfig({
       "https://www.instagram.com/*",
       "https://instagram.com/*",
       "https://i.instagram.com/*",
+      // CDN do IG — necessário para baixar bytes da foto de perfil de dentro do
+      // content script e converter pra data URL. Sem essas permissões, fetch
+      // dispara CORS error e a foto nunca carrega no card.
+      "https://*.cdninstagram.com/*",
+      "https://*.fbcdn.net/*",
     ],
 
     action: {

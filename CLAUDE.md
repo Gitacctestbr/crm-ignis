@@ -58,7 +58,16 @@ Leads are scoped by `workspaceId` (currently hardcoded to `"default"`).
 
 ### Instagram Integration (`src/instagram/`)
 
-`parseInstagram.ts` handles URL parsing and username extraction. Avatar fetching uses the `web_profile_info` Instagram API endpoint with DOM fallback.
+- `parseInstagram.ts` — URL parsing e extração de username (rota `/{username}/`).
+- `avatarScraper.ts` — fetch via `web_profile_info` + fallback DOM/HTML. Roda dentro da aba do IG (content script ou DmLeadPanel injetado), usa cookies de sessão.
+- `avatarFetcher.ts` — wrappers para popup/sidepanel/dashboard que NÃO rodam dentro da aba do IG. Roteiam por mensagem para qualquer aba do IG aberta.
+
+**Avatares (foto de perfil do lead):**
+- `Lead.avatarUrl` é opcional, persistido no IndexedDB.
+- Captura automática durante `addLead` quando o caller passa `avatarUrl` (sidepanel `captureFromCurrentTab`, DmLeadPanel em contexto de perfil, mensagem `CRM_IGNIS_CAPTURE`).
+- `addLead` faz backfill: se o lead já existia sem foto e a captura nova traz uma, atualiza silenciosamente.
+- Backfill em massa via `backfillMissingAvatars` (botão "Atualizar fotos" no dashboard) — precisa de uma aba do IG aberta e logada.
+- URLs de CDN do IG têm assinatura com expiração curta (semanas). `LeadAvatar` cai automaticamente para iniciais quando a imagem falha; o usuário roda o backfill para refrescar.
 
 #### ⚠️ Limitações críticas do content.ts — leia antes de qualquer feature de integração
 
@@ -67,11 +76,11 @@ O `content.ts` é injetado no Instagram, mas sua capacidade de leitura é restri
 **O que funciona hoje:**
 - Extração de username via URL do perfil (`instagram.com/{username}/`)
 - Detecção de rota: sabe quando o usuário está em `/direct/` ou num perfil
+- Scraping de avatar via `web_profile_info` (mensagens `CRM_IGNIS_GET_PROFILE_META` e `CRM_IGNIS_FETCH_AVATAR`)
 
-**O que NÃO funciona e NUNCA funcionou:**
-- Busca ou exibição de avatar/foto do lead — não existe em nenhuma parte do CRM
+**O que NÃO funciona:**
 - Na tela de DMs (`instagram.com/direct/t/{thread_id}/`), a URL não contém o username do lead — o `content.ts` é cego quanto a *com quem* o usuário está conversando. Qualquer tentativa de scraping de DOM nessa rota é instável e proibida
-- A extensão não faz nenhuma leitura confiável do DOM do Instagram além da URL
+- A extensão não faz nenhuma leitura confiável do DOM do Instagram além da URL e do endpoint `web_profile_info`
 
 **Regra absoluta para features na rota `/direct/`:**
 - Nunca tentar detectar o username do lead via scraping de DOM na DM
@@ -82,6 +91,7 @@ O `content.ts` é injetado no Instagram, mas sua capacidade de leitura é restri
 1. Verifique em qual rota a feature precisa funcionar
 2. Se for em `/direct/`: identificação de lead é sempre manual, sem scraping
 3. Se for em `/username/`: username disponível via URL, use `parseInstagram.ts`
+4. Para avatar: chame `fetchAvatarForUsername` (de fora da aba) ou `fetchAvatarViaWebProfileInfo` (de dentro)
 
 ### Shared UI (`src/ui/`)
 

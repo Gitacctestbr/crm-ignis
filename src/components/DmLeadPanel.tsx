@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { STAGES, stageLabel } from "../crm/stages";
 import type { StageId } from "../crm/stages";
+import { fetchAvatarAsDataUrl } from "../instagram/avatarScraper";
+import { LeadAvatar } from "../ui/LeadAvatar";
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
 
@@ -12,6 +14,7 @@ interface LeadSummary {
   displayName?: string;
   stageId: string;
   board: BoardType;
+  avatarUrl?: string | null;
 }
 
 type ViewState =
@@ -190,6 +193,7 @@ async function rpcGetLead(username: string): Promise<LeadSummary | null> {
       displayName: resp.lead.displayName,
       stageId: resp.lead.stageId,
       board: resp.lead.board,
+      avatarUrl: resp.lead.avatarUrl ?? null,
     };
   }
   return null;
@@ -213,6 +217,14 @@ async function rpcRecentLeads(limit = 5): Promise<LeadSummary[]> {
   return [];
 }
 
+async function rpcUpdateAvatar(leadId: string, avatarUrl: string): Promise<boolean> {
+  const resp = await chrome.runtime.sendMessage({
+    type: "CRM_IGNIS_DM_SMART_SAVE",
+    payload: { workspaceId: WORKSPACE_ID, leadId, patch: { avatarUrl } },
+  });
+  return !!resp?.ok;
+}
+
 async function rpcUpdateStage(leadId: string, stageId: string): Promise<boolean> {
   const resp = await chrome.runtime.sendMessage({
     type: "CRM_IGNIS_DM_SMART_SAVE",
@@ -226,6 +238,7 @@ async function rpcCreateLead(input: {
   displayName: string;
   board: BoardType;
   stageId: StageId;
+  avatarUrl?: string | null;
 }): Promise<LeadSummary | null> {
   const resp = await chrome.runtime.sendMessage({
     type: "CRM_IGNIS_CAPTURE",
@@ -234,6 +247,7 @@ async function rpcCreateLead(input: {
       stageId: input.stageId,
       username: normalizeUsername(input.username),
       displayName: input.displayName.trim(),
+      avatarUrl: input.avatarUrl ?? undefined,
     },
   });
   if (!resp?.ok || !resp.result?.lead) return null;
@@ -246,6 +260,7 @@ async function rpcCreateLead(input: {
     displayName: lead.displayName,
     stageId: lead.stageId,
     board: lead.board,
+    avatarUrl: lead.avatarUrl ?? null,
   };
 }
 
@@ -345,7 +360,6 @@ function LeadRow({
   lead: LeadSummary;
   onClick: () => void;
 }) {
-  const initial = (lead.username[0] || "?").toUpperCase();
   return (
     <button
       type="button"
@@ -360,23 +374,14 @@ function LeadRow({
         (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(38,38,46,0.85)";
       }}
     >
-      <div
-        style={{
-          width: "30px",
-          height: "30px",
-          borderRadius: "999px",
-          background: "rgba(234,124,48,0.12)",
-          border: "1px solid rgba(234,124,48,0.28)",
-          color: C.accent,
-          display: "grid",
-          placeItems: "center",
-          fontWeight: 700,
-          fontSize: "12px",
-          flexShrink: 0,
-        }}
-      >
-        {initial}
-      </div>
+      <LeadAvatar
+        username={lead.username}
+        avatarUrl={lead.avatarUrl}
+        size={30}
+        bgColor="rgba(234,124,48,0.12)"
+        borderColor="rgba(234,124,48,0.28)"
+        textColor={C.accent}
+      />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
           style={{
@@ -426,24 +431,42 @@ function SelectedView({
         style={{
           display: "flex",
           alignItems: "center",
-          gap: "8px",
+          gap: "10px",
           marginBottom: "10px",
         }}
       >
-        <span style={{ color: C.ok, fontSize: "14px" }}>✓</span>
-        <span style={{ fontWeight: 700, fontSize: "13px" }}>
-          @{state.lead.username}
-        </span>
-        <span style={s.badge}>
-          {state.lead.board === "OUTBOUND" ? "Outbound" : "Social"}
-        </span>
-      </div>
-
-      {state.lead.displayName ? (
-        <div style={{ fontSize: "11px", color: C.muted, marginBottom: "10px" }}>
-          {state.lead.displayName}
+        <LeadAvatar
+          username={state.lead.username}
+          avatarUrl={state.lead.avatarUrl}
+          size={44}
+          bgColor="rgba(234,124,48,0.12)"
+          borderColor="rgba(234,124,48,0.45)"
+          textColor={C.accent}
+        />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              marginBottom: "2px",
+            }}
+          >
+            <span style={{ color: C.ok, fontSize: "14px" }}>✓</span>
+            <span style={{ fontWeight: 700, fontSize: "13px" }}>
+              @{state.lead.username}
+            </span>
+            <span style={s.badge}>
+              {state.lead.board === "OUTBOUND" ? "Outbound" : "Social"}
+            </span>
+          </div>
+          {state.lead.displayName ? (
+            <div style={{ fontSize: "11px", color: C.muted }}>
+              {state.lead.displayName}
+            </div>
+          ) : null}
         </div>
-      ) : null}
+      </div>
 
       <div style={{ marginBottom: "10px" }}>
         <label style={s.label}>Etapa atual</label>
@@ -881,6 +904,38 @@ export function DmLeadPanel({
     };
   }, [context]);
 
+  // Profile: se o lead resolvido não tem avatar e estamos no perfil dele
+  // (estamos dentro da aba do IG), busca via web_profile_info e persiste.
+  // Roda apenas uma vez por (username, lead.id) para não martelar a API.
+  const avatarFetchedForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (context !== "profile" || !username) return;
+    if (state.kind !== "selected") return;
+    if (state.lead.avatarUrl) return;
+    if (state.lead.username.toLowerCase() !== username.toLowerCase()) return;
+    if (avatarFetchedForRef.current === state.lead.id) return;
+
+    avatarFetchedForRef.current = state.lead.id;
+    let cancelled = false;
+    (async () => {
+      try {
+        const url = await fetchAvatarAsDataUrl(username);
+        if (cancelled || !url) return;
+        await rpcUpdateAvatar(state.lead.id, url);
+        // Reflete localmente sem esperar broadcast (evita flicker).
+        setState((cur) => {
+          if (cur.kind !== "selected" || cur.lead.id !== state.lead.id) return cur;
+          return { ...cur, lead: { ...cur.lead, avatarUrl: url } };
+        });
+      } catch {
+        /* sem foto, segue */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [context, username, state]);
+
   // Profile: listener de CRM_IGNIS_DB_UPDATED para refletir escritas externas
   // (ex.: sidepanel move o lead enquanto o usuário está no perfil) e como safety
   // net para qualquer operação de escrita confirmada pelo background worker.
@@ -1001,7 +1056,23 @@ export function DmLeadPanel({
     }) => {
       setError(null);
       try {
-        const lead = await rpcCreateLead(input);
+        // Em contexto de perfil, busca o avatar em paralelo — a página atual
+        // É o perfil, então web_profile_info responde com a foto deste user.
+        // Em contexto DM o cadastro é manual, sem avatar disponível.
+        let avatarUrl: string | null = null;
+        if (
+          context === "profile" &&
+          username &&
+          input.username.toLowerCase() === username.toLowerCase()
+        ) {
+          try {
+            avatarUrl = await fetchAvatarAsDataUrl(input.username);
+          } catch {
+            avatarUrl = null;
+          }
+        }
+
+        const lead = await rpcCreateLead({ ...input, avatarUrl });
         if (!lead) {
           setError("Erro ao cadastrar lead");
           return;
@@ -1023,7 +1094,7 @@ export function DmLeadPanel({
         setError(e?.message || "Erro ao cadastrar");
       }
     },
-    [context],
+    [context, username],
   );
 
   const handleChangeDraftStage = useCallback((next: string) => {

@@ -2,7 +2,9 @@ import React from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import type { BoardType } from "../../src/db/db";
 import { deleteLead, listLeadsByBoard, moveLeadStage, updateLead } from "../../src/db/leadsRepo";
+import { backfillMissingAvatars, type BackfillProgress } from "../../src/db/avatarBackfill";
 import { BackupRestorePanel } from "../../src/ui/BackupRestorePanel";
+import { LeadAvatar } from "../../src/ui/LeadAvatar";
 import { STAGES as CRM_STAGES, normalizeStageId, stageLabel } from "../../src/crm/stages";
 
 const WORKSPACE_ID = "default";
@@ -49,6 +51,8 @@ export default function App() {
   const [dayFilter, setDayFilter] = React.useState<string>("");
   const [toast, setToast] = React.useState<Toast | null>(null);
   const [showBackup, setShowBackup] = React.useState(false);
+  const [backfill, setBackfill] = React.useState<BackfillProgress | null>(null);
+  const backfillCancelRef = React.useRef(false);
 
   const showToast = React.useCallback((message: string, kind: Toast["kind"] = "ok") => {
     const t = { id: newId(), message, kind };
@@ -139,6 +143,41 @@ export default function App() {
     }
   }
 
+  async function runAvatarBackfill() {
+    if (backfill) {
+      // Botão clicado de novo → cancela
+      backfillCancelRef.current = true;
+      return;
+    }
+    backfillCancelRef.current = false;
+    setBackfill({ done: 0, total: 0, updated: 0, skipped: 0 });
+    try {
+      const result = await backfillMissingAvatars({
+        workspaceId: WORKSPACE_ID,
+        onProgress: (p) => setBackfill(p),
+        shouldCancel: () => backfillCancelRef.current,
+      });
+      if (result.cancelled) {
+        showToast(`Backfill cancelado. Atualizados: ${result.updated}`, "warn");
+      } else if (result.total === 0) {
+        showToast("Todos os leads já têm foto.", "ok");
+      } else if (result.updated === 0) {
+        showToast(
+          "Nenhum avatar capturado. Abra uma aba do Instagram e tente de novo.",
+          "warn",
+        );
+      } else {
+        showToast(`✅ ${result.updated} avatar(es) atualizado(s).`, "ok");
+      }
+    } catch (e: any) {
+      console.error(e);
+      showToast(e?.message || "Erro no backfill", "error");
+    } finally {
+      setBackfill(null);
+      backfillCancelRef.current = false;
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[rgb(var(--bg))] text-[rgb(var(--text))]">
       {/* ── Topbar ── */}
@@ -201,6 +240,20 @@ export default function App() {
               Limpar
             </button>
           ) : null}
+
+          <button
+            className="text-xs px-3 py-1.5 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:border-[rgba(234,124,48,0.35)] hover:bg-white/5 transition-all"
+            onClick={() => void runAvatarBackfill()}
+            title={
+              backfill
+                ? "Clique para cancelar"
+                : "Busca foto de perfil para leads que ainda não têm. Precisa de uma aba do Instagram aberta."
+            }
+          >
+            {backfill
+              ? `Atualizando fotos… ${backfill.done}/${backfill.total} (${backfill.updated} ok)`
+              : "Atualizar fotos"}
+          </button>
 
           <button
             className="text-xs px-3 py-1.5 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:bg-white/5 transition-all"
@@ -353,7 +406,6 @@ function LeadCard(props: {
     tRef.current = window.setTimeout(() => props.onUpdateNotes(next), 400);
   }
 
-  const firstLetter = (String(lead.username || "?")[0] || "?").toUpperCase();
   const stage = stageLabel(normalizeStageId(String(lead.stageId || "")));
 
   return (
@@ -367,16 +419,13 @@ function LeadCard(props: {
     >
       {/* ── 1. Nome / Avatar ── */}
       <div className="flex items-center gap-2">
-        <button
-          type="button"
-          className="shrink-0"
+        <LeadAvatar
+          username={lead.username}
+          avatarUrl={lead.avatarUrl}
+          size={32}
           onClick={() => openInstagramProfile(lead.username)}
           title="Abrir perfil no Instagram"
-        >
-          <div className="w-8 h-8 rounded-full border border-[rgba(234,124,48,0.3)] bg-[rgba(234,124,48,0.1)] grid place-items-center text-[11px] font-black text-[rgb(var(--accent))]">
-            {firstLetter}
-          </div>
-        </button>
+        />
 
         <div className="flex-1 min-w-0">
           {/* ── 2. Status / Empresa ── */}
