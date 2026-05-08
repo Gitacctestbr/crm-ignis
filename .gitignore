@@ -17,6 +17,12 @@ web-ext.config.ts
 # Local CRM backups (contém dados pessoais reais)
 BACKUP DATABASE/
 
+# Segredos e credenciais — NUNCA commitar
+.env
+.env.local
+scripts/.env
+scripts/google.json
+
 # Claude Code local config (memórias e settings pessoais)
 .claude/
 

@@ -12,7 +12,7 @@ export default defineConfig({
     version: "0.0.2",
 
     // Só permissões usadas HOJE
-    permissions: ["sidePanel", "tabs", "downloads", "unlimitedStorage", "storage"],
+    permissions: ["sidePanel", "tabs", "downloads", "unlimitedStorage", "storage", "alarms"],
     optional_permissions: ["notifications"],
 
     host_permissions: [

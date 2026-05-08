@@ -9,10 +9,13 @@ export const SETTINGS_KEY = "crm-ignis-settings";
 export type ExtensionSettings = {
   /** Abre o painel CRM IGNIS automaticamente ao entrar num perfil do Instagram. */
   autoOpenOnProfile: boolean;
+  /** URL pública do CSV da planilha Google Sheets (Arquivo → Publicar na web → CSV). */
+  syncCsvUrl: string;
 };
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
   autoOpenOnProfile: false,
+  syncCsvUrl: "",
 };
 
 function merge(raw: unknown): ExtensionSettings {

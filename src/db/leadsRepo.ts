@@ -188,7 +188,7 @@ export async function searchLeads(input: {
   const all = await db.leads.where("workspaceId").equals(input.workspaceId).toArray();
 
   const matched = all.filter((l) => {
-    // canonicalUsername no campo também cobre dados legados com @ ou maiúsculas
+    if (l.deletedAt) return false;
     const u = canonicalUsername(String(l.usernameLower || l.username || ""));
     const d = String(l.displayName || "").toLowerCase();
     return u.includes(q) || d.includes(q);
@@ -210,8 +210,9 @@ export async function listRecentlyUpdatedLeads(input: {
   const limit = Math.max(1, Math.min(50, input.limit ?? 5));
 
   const items = await db.leads.where("workspaceId").equals(input.workspaceId).toArray();
-  items.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
-  return items.slice(0, limit);
+  const active = items.filter((l) => !l.deletedAt);
+  active.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+  return active.slice(0, limit);
 }
 
 export async function listLeadsByBoard(workspaceId: string, board: BoardType) {
@@ -220,8 +221,9 @@ export async function listLeadsByBoard(workspaceId: string, board: BoardType) {
     .between([workspaceId, board, Dexie.minKey], [workspaceId, board, Dexie.maxKey])
     .toArray();
 
-  items.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
-  return items;
+  const active = items.filter((l) => !l.deletedAt);
+  active.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+  return active;
 }
 
 export async function updateLead(input: {
@@ -347,11 +349,26 @@ export async function deleteLead(input: { workspaceId: string; leadId: string })
   if (!lead) return;
   if (lead.workspaceId !== input.workspaceId) return;
 
-  await db.transaction("rw", db.leads, db.tasks, db.events, async () => {
-    await db.tasks.where("[workspaceId+leadId]").equals([input.workspaceId, input.leadId]).delete();
-    await db.events.where("[workspaceId+leadId]").equals([input.workspaceId, input.leadId]).delete();
-    await db.leads.delete(input.leadId);
-  });
-
+  await db.leads.update(input.leadId, { deletedAt: Date.now() });
   await broadcastDbUpdated("deleteLead", input.leadId);
+}
+
+export async function restoreLead(input: { workspaceId: string; leadId: string }) {
+  const lead = await db.leads.get(input.leadId);
+  if (!lead) return;
+  if (lead.workspaceId !== input.workspaceId) return;
+
+  const now = Date.now();
+  const restored = { ...lead, stageId: normalizeStageId("LEADS_NOVOS"), updatedAt: now, lastTouchedAt: now };
+  delete restored.deletedAt;
+  await db.leads.put(restored);
+  await broadcastDbUpdated("restoreLead", input.leadId);
+}
+
+export async function listDeletedLeads(input: { workspaceId: string }): Promise<Lead[]> {
+  if (!input.workspaceId) throw new Error("workspaceId obrigatório");
+  const all = await db.leads.where("workspaceId").equals(input.workspaceId).toArray();
+  return all
+    .filter((l) => !!l.deletedAt)
+    .sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0));
 }

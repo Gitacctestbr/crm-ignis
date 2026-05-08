@@ -26,6 +26,7 @@ export type Lead = {
   updatedAt: number;
   lastTouchedAt: number;
   nextFollowUpAt?: number;
+  deletedAt?: number;
 
   // ✅ CTA (registro unificado)
   ctaUrl?: string;
@@ -354,6 +355,17 @@ export class CrmIgnisDB extends Dexie {
             `${dirtyCount} normalizado(s), ${losersToDelete.length} duplicata(s) mesclada(s) e removida(s).`,
         );
       });
+
+    // v5: adiciona campo deletedAt (soft delete) — sem alteração de índices
+    this.version(5).stores({
+      leads:
+        "id, workspaceId, [workspaceId+usernameLower], [workspaceId+board+stageId], *tags, [workspaceId+nextFollowUpAt], createdAt, updatedAt",
+      tasks: "id, workspaceId, [workspaceId+status], [workspaceId+dueAt], [workspaceId+leadId]",
+      events:
+        "id, workspaceId, [workspaceId+type+day], [workspaceId+type+toStageId+day], [workspaceId+leadId], at",
+      dailyMetrics:
+        "id, workspaceId, [workspaceId+board+dateKey], [workspaceId+dateKey], [workspaceId+board+closedAt], dateKey, updatedAt, closedAt",
+    });
   }
 }
 

@@ -1,6 +1,7 @@
 import React from "react";
 import { addLead, deleteLead, getLeadByUsername, listLeadsByBoard, registerCtaAndMove } from "../db/leadsRepo";
 import type { BoardType, DailyMetrics, Lead } from "../db/db";
+import { backfillMissingAvatars, type BackfillProgress } from "../db/avatarBackfill";
 import {
   closeDailyMetrics,
   emptyDailyMetrics,
@@ -258,6 +259,9 @@ export function SidePanelApp() {
 
   const [leads, setLeads] = React.useState<any[]>([]);
   const [search, setSearch] = React.useState("");
+  const [syncing, setSyncing] = React.useState(false);
+  const [backfill, setBackfill] = React.useState<BackfillProgress | null>(null);
+  const backfillCancelRef = React.useRef(false);
 
   const [dayFilter, setDayFilter] = React.useState<string>(""); // YYYY-MM-DD
 
@@ -308,6 +312,64 @@ export function SidePanelApp() {
     chrome.runtime.onMessage.addListener(handler);
     return () => chrome.runtime.onMessage.removeListener(handler);
   }, [reload]);
+
+  async function handleForceSync() {
+    setSyncing(true);
+    try {
+      const resp = await new Promise<any>((resolve) => {
+        try {
+          chrome.runtime.sendMessage({ type: "CRM_IGNIS_FORCE_SYNC" }, (r) => {
+            const err = chrome.runtime.lastError;
+            if (err) { resolve({ ok: false, error: err.message }); return; }
+            resolve(r ?? { ok: false, error: "Sem resposta do background" });
+          });
+        } catch (e) {
+          resolve({ ok: false, error: String(e) });
+        }
+      });
+      if (!resp.ok) {
+        toast(`Erro ao sincronizar: ${resp.error}`);
+      } else {
+        const { created, skipped } = resp as { created: number; skipped: number; errors: number };
+        toast(`Sync: ${created} novo(s), ${skipped} já existia(m).`);
+        if (created > 0) void reload();
+      }
+    } catch (e: any) {
+      toast(e?.message || "Erro na sincronização");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  async function runAvatarBackfill() {
+    if (backfill) {
+      backfillCancelRef.current = true;
+      return;
+    }
+    backfillCancelRef.current = false;
+    setBackfill({ done: 0, total: 0, updated: 0, skipped: 0 });
+    try {
+      const result = await backfillMissingAvatars({
+        workspaceId,
+        onProgress: (p) => setBackfill(p),
+        shouldCancel: () => backfillCancelRef.current,
+      });
+      if (result.cancelled) {
+        toast(`Backfill cancelado. Atualizados: ${result.updated}`);
+      } else if (result.total === 0) {
+        toast("Todos os leads já têm foto.");
+      } else if (result.updated === 0) {
+        toast("Sem avatar capturado. Abra uma aba do Instagram logada.");
+      } else {
+        toast(`✅ ${result.updated} foto(s) atualizada(s).`);
+      }
+    } catch (e: any) {
+      toast(e?.message || "Erro no backfill de avatares");
+    } finally {
+      setBackfill(null);
+      backfillCancelRef.current = false;
+    }
+  }
 
   async function captureFromCurrentTab() {
     if (!activeBoard) return;
@@ -440,9 +502,9 @@ export function SidePanelApp() {
         ))}
       </div>
 
-      <div className="mt-3 flex items-center gap-2">
+      <div className="mt-3 flex items-center gap-2 flex-wrap">
         <button
-          className="text-xs px-3 py-2 rounded-full border border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10 hover:border-[rgba(234,124,48,0.45)] transition-all"
+          className="text-xs px-3 py-2 rounded-full border border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10 hover:border-[rgba(234,124,48,0.45)] transition-all disabled:opacity-50"
           onClick={() => void captureFromCurrentTab()}
           disabled={!activeBoard}
         >
@@ -454,6 +516,25 @@ export function SidePanelApp() {
           onClick={() => void openOrFocusDashboard()}
         >
           Abrir Kanban
+        </button>
+
+        <button
+          className="text-xs px-3 py-2 rounded-full border border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10 hover:border-[rgba(234,124,48,0.45)] transition-all disabled:opacity-50"
+          onClick={() => void handleForceSync()}
+          disabled={syncing}
+          title="Busca o CSV da URL configurada em Settings → Sincronização e importa leads novos."
+        >
+          {syncing ? "Sincronizando…" : "Sincronizar Leads Drive"}
+        </button>
+
+        <button
+          className="text-xs px-3 py-2 rounded-full border border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10 hover:border-[rgba(234,124,48,0.45)] transition-all disabled:opacity-50"
+          onClick={() => void runAvatarBackfill()}
+          title={backfill ? "Clique para cancelar" : "Busca fotos para todos os leads sem avatar. Precisa de uma aba do Instagram aberta."}
+        >
+          {backfill
+            ? `Fotos… ${backfill.done}/${backfill.total} — cancelar`
+            : "Atualizar Fotos"}
         </button>
       </div>
 

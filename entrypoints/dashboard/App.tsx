@@ -1,7 +1,7 @@
 import React from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import type { BoardType } from "../../src/db/db";
-import { deleteLead, listLeadsByBoard, moveLeadStage, updateLead } from "../../src/db/leadsRepo";
+import { addLead, deleteLead, listDeletedLeads, listLeadsByBoard, moveLeadStage, restoreLead, updateLead } from "../../src/db/leadsRepo";
 import { backfillMissingAvatars, type BackfillProgress } from "../../src/db/avatarBackfill";
 import { BackupRestorePanel } from "../../src/ui/BackupRestorePanel";
 import { LeadAvatar } from "../../src/ui/LeadAvatar";
@@ -53,6 +53,10 @@ export default function App() {
   const [showBackup, setShowBackup] = React.useState(false);
   const [backfill, setBackfill] = React.useState<BackfillProgress | null>(null);
   const backfillCancelRef = React.useRef(false);
+  const csvInputRef = React.useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = React.useState(false);
+  const [syncing, setSyncing] = React.useState(false);
+  const [showTrash, setShowTrash] = React.useState(false);
 
   const showToast = React.useCallback((message: string, kind: Toast["kind"] = "ok") => {
     const t = { id: newId(), message, kind };
@@ -178,6 +182,171 @@ export default function App() {
     }
   }
 
+  // ─── Sync via Google Sheets URL ─────────────────────────────────────────────
+
+  async function handleForceSync() {
+    setSyncing(true);
+    try {
+      const resp = await new Promise<any>((resolve) => {
+        try {
+          chrome.runtime.sendMessage({ type: "CRM_IGNIS_FORCE_SYNC" }, (r) => {
+            const err = chrome.runtime.lastError;
+            if (err) { resolve({ ok: false, error: err.message }); return; }
+            resolve(r ?? { ok: false, error: "Sem resposta do background" });
+          });
+        } catch (e) {
+          resolve({ ok: false, error: String(e) });
+        }
+      });
+      if (!resp.ok) {
+        showToast(`Erro ao sincronizar: ${resp.error}`, "error");
+      } else {
+        const { created, skipped, errors } = resp as { created: number; skipped: number; errors: number };
+        showToast(
+          `Sincronizado: ${created} novo(s), ${skipped} já existia(m)${errors ? `, ${errors} ignorado(s)` : ""}.`,
+          errors && created === 0 ? "error" : errors ? "warn" : "ok",
+        );
+      }
+    } catch (e: any) {
+      showToast(e?.message || "Erro na sincronização", "error");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  // ─── CSV Import ─────────────────────────────────────────────────────────────
+
+  function parseSimpleCsv(text: string): string[][] {
+    const result: string[][] = [];
+    let cur = "";
+    let inQuotes = false;
+    let row: string[] = [];
+
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      const next = text[i + 1];
+
+      if (inQuotes) {
+        if (ch === '"' && next === '"') {
+          cur += '"';
+          i++;
+        } else if (ch === '"') {
+          inQuotes = false;
+        } else {
+          cur += ch;
+        }
+      } else {
+        if (ch === '"') {
+          inQuotes = true;
+        } else if (ch === ",") {
+          row.push(cur.trim());
+          cur = "";
+        } else if (ch === "\n" || (ch === "\r" && next === "\n")) {
+          if (ch === "\r") i++;
+          row.push(cur.trim());
+          if (row.some((f) => f)) result.push(row);
+          row = [];
+          cur = "";
+        } else if (ch === "\r") {
+          row.push(cur.trim());
+          if (row.some((f) => f)) result.push(row);
+          row = [];
+          cur = "";
+        } else {
+          cur += ch;
+        }
+      }
+    }
+    if (cur || row.length > 0) {
+      row.push(cur.trim());
+      if (row.some((f) => f)) result.push(row);
+    }
+
+    return result;
+  }
+
+  function extractUsernameFromLink(link: string): string | null {
+    const s = String(link || "").trim();
+    if (!s) return null;
+    try {
+      const url = new URL(s.startsWith("http") ? s : `https://${s}`);
+      if (url.hostname.includes("instagram.com")) {
+        const parts = url.pathname.split("/").filter(Boolean);
+        return parts[0] || null;
+      }
+    } catch {
+      /* fallback para regex */
+    }
+    const m = s.match(/instagram\.com\/([^/?#\s]+)/);
+    return m?.[1] || null;
+  }
+
+  async function handleCsvImport(file: File) {
+    setImporting(true);
+    let created = 0;
+    let skipped = 0;
+    let errors = 0;
+
+    try {
+      const text = await file.text();
+      const rows = parseSimpleCsv(text);
+
+      // Pula a primeira linha se não contiver um link do Instagram (é cabeçalho)
+      const firstCell = String(rows[0]?.[0] ?? "").toLowerCase();
+      const dataRows = firstCell.includes("instagram.com") || firstCell.startsWith("http")
+        ? rows
+        : rows.slice(1);
+
+      for (const row of dataRows) {
+        const [linkCol, nome, bio, seguidores, seguindo] = row;
+        const username = extractUsernameFromLink(linkCol ?? "");
+        if (!username) {
+          errors++;
+          continue;
+        }
+
+        const noteParts = [
+          bio ? `Bio: ${bio}` : "",
+          seguidores ? `Seguidores: ${seguidores}` : "",
+          seguindo ? `Seguindo: ${seguindo}` : "",
+        ].filter(Boolean);
+        const notes = noteParts.join("\n");
+
+        try {
+          const result = await addLead({
+            workspaceId: WORKSPACE_ID,
+            board: "OUTBOUND",
+            stageId: "LEADS_NOVOS",
+            username,
+            displayName: nome?.trim() || undefined,
+          });
+
+          if (result.status === "created" && notes) {
+            await updateLead({
+              workspaceId: WORKSPACE_ID,
+              leadId: result.lead.id,
+              patch: { notes },
+            });
+          }
+
+          result.status === "created" ? created++ : skipped++;
+        } catch {
+          errors++;
+        }
+      }
+
+      const msg = `Importados: ${created} novo(s), ${skipped} já existia(m)${errors ? `, ${errors} ignorado(s)` : ""}.`;
+      showToast(msg, errors && created === 0 ? "error" : errors ? "warn" : "ok");
+    } catch (e: any) {
+      console.error("[handleCsvImport]", e);
+      showToast(e?.message || "Erro ao ler o CSV", "error");
+    } finally {
+      setImporting(false);
+      // Limpa o input para permitir reimportar o mesmo arquivo
+      if (csvInputRef.current) csvInputRef.current.value = "";
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[rgb(var(--bg))] text-[rgb(var(--text))]">
       {/* ── Topbar ── */}
@@ -256,6 +425,42 @@ export default function App() {
           </button>
 
           <button
+            className="text-xs px-3 py-1.5 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:border-[rgba(234,124,48,0.35)] hover:bg-white/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => void handleForceSync()}
+            disabled={syncing || importing}
+            title="Busca o CSV da URL configurada nas Settings e importa leads novos automaticamente (roda também a cada 30 min)."
+          >
+            {syncing ? "Sincronizando…" : "Sincronizar Leads Drive"}
+          </button>
+
+          <button
+            className="text-xs px-3 py-1.5 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:border-red-500/30 hover:bg-red-500/5 hover:text-red-300 transition-all"
+            onClick={() => setShowTrash((v) => !v)}
+            title="Ver leads removidos (Lixeira)"
+          >
+            🗑 Lixeira
+          </button>
+
+          <button
+            className="text-xs px-3 py-1.5 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:border-[rgba(234,124,48,0.35)] hover:bg-white/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => csvInputRef.current?.click()}
+            disabled={importing}
+            title="Importa um CSV exportado manualmente da planilha Google Sheets (colunas: Link, Nome, Bio, Seguidores, Seguindo)"
+          >
+            {importing ? "Importando…" : "Importar CSV Manual"}
+          </button>
+          <input
+            ref={csvInputRef}
+            type="file"
+            accept=".csv"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void handleCsvImport(file);
+            }}
+          />
+
+          <button
             className="text-xs px-3 py-1.5 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:bg-white/5 transition-all"
             onClick={() => setShowBackup((v) => !v)}
             title="Abrir/Fechar Backup"
@@ -305,6 +510,15 @@ export default function App() {
           Arraste o card para outra coluna para mover o estágio.
         </div>
       </div>
+
+      {/* ── Lixeira Modal ── */}
+      {showTrash ? (
+        <TrashModal
+          workspaceId={WORKSPACE_ID}
+          onClose={() => setShowTrash(false)}
+          onToast={showToast}
+        />
+      ) : null}
 
       {/* ── Toast ── */}
       {toast ? (
@@ -382,6 +596,81 @@ function KanbanColumn(props: {
             onUpdateNotes={(notes) => props.onUpdateNotes(l.id, notes)}
           />
         ))}
+      </div>
+    </div>
+  );
+}
+
+function TrashModal(props: {
+  workspaceId: string;
+  onClose: () => void;
+  onToast: (msg: string, kind: Toast["kind"]) => void;
+}) {
+  const deleted = useLiveQuery(
+    () => listDeletedLeads({ workspaceId: props.workspaceId }),
+    [props.workspaceId],
+  ) ?? [];
+
+  async function handleRestore(leadId: string, username: string) {
+    try {
+      await restoreLead({ workspaceId: props.workspaceId, leadId });
+      props.onToast(`✅ @${username} restaurado em Leads Novos`, "ok");
+    } catch (e: any) {
+      props.onToast(e?.message || "Erro ao restaurar lead", "error");
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      onClick={(e) => { if (e.target === e.currentTarget) props.onClose(); }}
+    >
+      <div className="w-full max-w-md mx-4 rounded-[var(--radius)] border border-[rgb(var(--border))] bg-[rgb(var(--bg))] shadow-[var(--shadow-md)] flex flex-col max-h-[80vh]">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[rgb(var(--border))]/60 shrink-0">
+          <div className="text-sm font-bold">
+            🗑 Lixeira
+            <span className="ml-2 text-[11px] font-normal text-[rgb(var(--muted))]">
+              ({deleted.length} lead{deleted.length !== 1 ? "s" : ""})
+            </span>
+          </div>
+          <button
+            className="text-xs text-[rgb(var(--muted))] hover:text-[rgb(var(--text))] transition-colors"
+            onClick={props.onClose}
+          >
+            ✕ Fechar
+          </button>
+        </div>
+        <div className="p-3 overflow-y-auto flex flex-col gap-1.5">
+          {deleted.length === 0 ? (
+            <div className="text-xs text-[rgb(var(--muted))]/60 text-center py-10">
+              Lixeira vazia
+            </div>
+          ) : (
+            deleted.map((l) => (
+              <div
+                key={l.id}
+                className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg bg-white/[0.03] border border-[rgb(var(--border))]/60"
+              >
+                <LeadAvatar username={l.username} avatarUrl={l.avatarUrl} size={28} />
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-bold truncate">@{l.username}</div>
+                  {l.displayName ? (
+                    <div className="text-[10px] text-[rgb(var(--muted))] truncate">{l.displayName}</div>
+                  ) : null}
+                  <div className="text-[9px] text-[rgb(var(--muted))]/50 mt-0.5">
+                    Removido {l.deletedAt ? new Date(l.deletedAt).toLocaleDateString("pt-BR") : ""}
+                  </div>
+                </div>
+                <button
+                  className="text-[10px] px-2.5 py-1 rounded border border-[rgb(var(--border))]/60 hover:border-[rgba(234,124,48,0.4)] hover:bg-[rgba(234,124,48,0.05)] transition-all shrink-0"
+                  onClick={() => void handleRestore(l.id, l.username)}
+                >
+                  Restaurar
+                </button>
+              </div>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );
