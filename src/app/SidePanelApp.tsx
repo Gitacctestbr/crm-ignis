@@ -2,6 +2,7 @@ import React from "react";
 import { addLead, deleteLead, getLeadByUsername, listLeadsByBoard, registerCtaAndMove } from "../db/leadsRepo";
 import type { BoardType, DailyMetrics, Lead } from "../db/db";
 import { backfillMissingAvatars, type BackfillProgress } from "../db/avatarBackfill";
+import { useAuth } from "../auth/AuthContext";
 import {
   closeDailyMetrics,
   emptyDailyMetrics,
@@ -253,8 +254,9 @@ async function copyToClipboard(text: string) {
 }
 
 export function SidePanelApp() {
+  const { user } = useAuth();
   const [tab, setTab] = React.useState<Tab>("Outbound");
-  const workspaceId = "default";
+  const workspaceId = user?.id ?? "";
   const activeBoard = tabToBoard(tab);
 
   const [leads, setLeads] = React.useState<any[]>([]);
@@ -297,11 +299,6 @@ export function SidePanelApp() {
 
   React.useEffect(() => {
     void reload();
-    if (!activeBoard) return;
-    const id = window.setInterval(() => {
-      void reload();
-    }, 1500);
-    return () => window.clearInterval(id);
   }, [reload]);
 
   // Reload immediately when background broadcasts a DB change (e.g. lead saved from DM panel)
@@ -1097,7 +1094,8 @@ function MetricsPanel({
     void load(dateKey, board);
   }, [dateKey, board]);
 
-  // Resolve o lead "atual" (aba ativa do Instagram) para definir o estado do botão Registrar/Editar CTA
+  // Resolve o lead "atual" (aba ativa do Instagram) para o botão Registrar/Editar CTA.
+  // Carrega uma vez ao montar e recarrega a cada DB_UPDATED — sem polling.
   React.useEffect(() => {
     let cancelled = false;
     const tick = async () => {
@@ -1111,12 +1109,15 @@ function MetricsPanel({
       }
     };
     void tick();
-    const id = window.setInterval(() => {
-      void tick();
-    }, 1500);
+
+    const handler = (msg: any) => {
+      if (msg?.type === "CRM_IGNIS_DB_UPDATED") void tick();
+    };
+    chrome.runtime.onMessage.addListener(handler);
+
     return () => {
       cancelled = true;
-      window.clearInterval(id);
+      chrome.runtime.onMessage.removeListener(handler);
     };
   }, [workspaceId]);
 

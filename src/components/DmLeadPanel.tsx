@@ -175,6 +175,9 @@ const s = {
 
 // ─── Comunicação com background ─────────────────────────────────────────────
 
+// Placeholder — o background ignora este campo e resolve o workspaceId
+// a partir da sessão Supabase (auth.uid()). Mantido apenas para não quebrar
+// chamadas existentes; pode ser removido quando os RPCs forem atualizados.
 const WORKSPACE_ID = "default";
 
 function normalizeUsername(u: string): string {

@@ -4,9 +4,12 @@ import "../../assets/theme.css";
 import React from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
+import AuthGate from "../../src/auth/AuthGate";
 
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
+    <AuthGate>
+      <App />
+    </AuthGate>
   </React.StrictMode>
 );

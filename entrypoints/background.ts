@@ -4,6 +4,22 @@ function normalizeUsername(u: string) {
   return String(u || "").trim().replace(/^@+/, "").toLowerCase();
 }
 
+/**
+ * Resolve o workspaceId a partir da sessão Supabase ativa.
+ *
+ * Retorna null se o usuário não estiver logado — todas as operações que
+ * precisam de DB devem fazer no-op nesse caso (sem travar o service worker).
+ * Convenção do projeto: workspace_id === auth.uid() (TEXT).
+ */
+async function resolveWorkspaceId(): Promise<string | null> {
+  try {
+    const { getCurrentUserId } = await import("../src/utils/supabaseClient");
+    return await getCurrentUserId();
+  } catch {
+    return null;
+  }
+}
+
 async function broadcastToast(message: string) {
   try {
     await chrome.runtime.sendMessage({ type: "CRM_IGNIS_TOAST", message });
@@ -81,6 +97,13 @@ function extractUsernameFromLink(link: string): string | null {
 type SyncResult = { created: number; skipped: number; errors: number };
 
 async function syncLeadsFromSheets(): Promise<SyncResult> {
+  const workspaceId = await resolveWorkspaceId();
+  if (!workspaceId) {
+    // Sem sessão ativa — sync silenciosamente vira no-op. Faz sentido para
+    // o auto-sync agendado, que pode disparar antes do usuário logar.
+    return { created: 0, skipped: 0, errors: 0 };
+  }
+
   const { loadSettings } = await import("../src/settings/extensionSettings");
   const settings = await loadSettings();
 
@@ -119,7 +142,7 @@ async function syncLeadsFromSheets(): Promise<SyncResult> {
 
     try {
       const result = await repo.addLead({
-        workspaceId: "default",
+        workspaceId,
         board: "OUTBOUND",
         stageId: "LEADS_NOVOS",
         username: normalizeUsername(username),
@@ -130,7 +153,7 @@ async function syncLeadsFromSheets(): Promise<SyncResult> {
         created++;
         if (notes) {
           await repo.updateLead({
-            workspaceId: "default",
+            workspaceId,
             leadId: result.lead.id,
             patch: { notes },
           });
@@ -156,7 +179,7 @@ async function syncLeadsFromSheets(): Promise<SyncResult> {
             const avatarUrl = await fetchAvatarForUsername(lead.username);
             if (avatarUrl) {
               await repo2.updateLead({
-                workspaceId: "default",
+                workspaceId,
                 leadId: lead.id,
                 patch: { avatarUrl },
               });
@@ -210,10 +233,16 @@ export default defineBackground(() => {
       const { board, stageId, username, displayName, avatarUrl } = message.payload || {};
 
       (async () => {
+        const workspaceId = await resolveWorkspaceId();
+        if (!workspaceId) {
+          sendResponse({ ok: false, error: "Não autenticado. Faça login para capturar leads." });
+          return;
+        }
+
         const repo = await import("../src/db/leadsRepo");
 
         const result = await repo.addLead({
-          workspaceId: "default",
+          workspaceId,
           board: board || "OUTBOUND",
           stageId: stageId || "LEADS_NOVOS",
           username: normalizeUsername(username || ""),
@@ -236,11 +265,17 @@ export default defineBackground(() => {
     // === DM SMART: buscar lead por username ===
     if (message?.type === "CRM_IGNIS_DM_SMART_GET_LEAD") {
       (async () => {
-        const { workspaceId, username } = message.payload || {};
+        const { username } = message.payload || {};
+        const workspaceId = await resolveWorkspaceId();
+        if (!workspaceId) {
+          sendResponse({ ok: false, reason: "Não autenticado." });
+          return;
+        }
+
         const repo = await import("../src/db/leadsRepo");
 
         const lead = await repo.getLeadByUsername({
-          workspaceId: workspaceId || "default",
+          workspaceId,
           username: normalizeUsername(username || ""),
         });
 
@@ -276,11 +311,17 @@ export default defineBackground(() => {
     // === DM SMART: buscar leads por nome/username ===
     if (message?.type === "CRM_IGNIS_SEARCH_LEADS") {
       (async () => {
-        const { workspaceId, query, limit } = message.payload || {};
+        const { query, limit } = message.payload || {};
+        const workspaceId = await resolveWorkspaceId();
+        if (!workspaceId) {
+          sendResponse({ ok: false, reason: "Não autenticado." });
+          return;
+        }
+
         const repo = await import("../src/db/leadsRepo");
 
         const items = await repo.searchLeads({
-          workspaceId: workspaceId || "default",
+          workspaceId,
           query: String(query || ""),
           limit: typeof limit === "number" ? limit : 10,
         });
@@ -307,11 +348,17 @@ export default defineBackground(() => {
     // === DM SMART: leads movimentados recentemente ===
     if (message?.type === "CRM_IGNIS_RECENT_LEADS") {
       (async () => {
-        const { workspaceId, limit } = message.payload || {};
+        const { limit } = message.payload || {};
+        const workspaceId = await resolveWorkspaceId();
+        if (!workspaceId) {
+          sendResponse({ ok: false, reason: "Não autenticado." });
+          return;
+        }
+
         const repo = await import("../src/db/leadsRepo");
 
         const items = await repo.listRecentlyUpdatedLeads({
-          workspaceId: workspaceId || "default",
+          workspaceId,
           limit: typeof limit === "number" ? limit : 5,
         });
 
@@ -337,7 +384,13 @@ export default defineBackground(() => {
     // === DM SMART: salvar alterações ===
     if (message?.type === "CRM_IGNIS_DM_SMART_SAVE") {
       (async () => {
-        const { workspaceId, leadId, patch } = message.payload || {};
+        const { leadId, patch } = message.payload || {};
+        const workspaceId = await resolveWorkspaceId();
+        if (!workspaceId) {
+          sendResponse({ ok: false, reason: "Não autenticado." });
+          return;
+        }
+
         const repo = await import("../src/db/leadsRepo");
 
         if (!leadId || !patch || typeof patch !== "object") {
@@ -346,7 +399,7 @@ export default defineBackground(() => {
         }
 
         await repo.updateLead({
-          workspaceId: workspaceId || "default",
+          workspaceId,
           leadId,
           patch: {
             stageId: patch.stageId,

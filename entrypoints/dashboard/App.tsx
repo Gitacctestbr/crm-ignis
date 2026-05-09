@@ -1,13 +1,12 @@
 import React from "react";
-import { useLiveQuery } from "dexie-react-hooks";
 import type { BoardType } from "../../src/db/db";
 import { addLead, deleteLead, listDeletedLeads, listLeadsByBoard, moveLeadStage, restoreLead, updateLead } from "../../src/db/leadsRepo";
 import { backfillMissingAvatars, type BackfillProgress } from "../../src/db/avatarBackfill";
 import { BackupRestorePanel } from "../../src/ui/BackupRestorePanel";
 import { LeadAvatar } from "../../src/ui/LeadAvatar";
 import { STAGES as CRM_STAGES, normalizeStageId, stageLabel } from "../../src/crm/stages";
-
-const WORKSPACE_ID = "default";
+import { useAuth } from "../../src/auth/AuthContext";
+import { useReactiveQuery } from "../../src/utils/useReactiveQuery";
 
 const STAGES = CRM_STAGES;
 
@@ -46,6 +45,8 @@ function todayAsInputDate(): string {
 }
 
 export default function App() {
+  const { user } = useAuth();
+  const WORKSPACE_ID = user?.id ?? "";
   const [board, setBoard] = React.useState<BoardType>("OUTBOUND");
   const [search, setSearch] = React.useState("");
   const [dayFilter, setDayFilter] = React.useState<string>("");
@@ -64,17 +65,17 @@ export default function App() {
     window.setTimeout(() => setToast((cur) => (cur?.id === t.id ? null : cur)), 2500);
   }, []);
 
-  // ─── Leads reativos (Dexie → UI sem polling, sem listeners manuais) ──────────
-  // useLiveQuery re-executa a query automaticamente sempre que qualquer linha
-  // da tabela `leads` for criada, atualizada ou deletada — em qualquer aba,
-  // painel flutuante ou worker que escreva no mesmo banco IndexedDB.
-  const rawLeads = useLiveQuery(
-    () => listLeadsByBoard(WORKSPACE_ID, board),
-    [board],
+  // ─── Leads reativos (Supabase → UI auto-refresh via broadcast) ──────────────
+  // useReactiveQuery roda a query e re-executa quando qualquer repo dispara
+  // CRM_IGNIS_DB_UPDATED após uma escrita. Mesma UX que tínhamos com
+  // useLiveQuery do Dexie, sem precisar de Realtime do Supabase.
+  const leadsQuery = useReactiveQuery(
+    () => (WORKSPACE_ID ? listLeadsByBoard(WORKSPACE_ID, board) : Promise.resolve([])),
+    [board, WORKSPACE_ID],
   );
-  // rawLeads é `undefined` enquanto a query ainda não retornou (montagem inicial
-  // e troca de board). Usar [] evita flicker de "coluna vazia" perceptível.
-  const leads = rawLeads ?? [];
+  // data é `undefined` enquanto a query ainda não retornou. Usar [] evita
+  // flicker de "coluna vazia" perceptível.
+  const leads = leadsQuery.data ?? [];
 
   const dayRange = React.useMemo(() => toLocalDayRange(dayFilter), [dayFilter]);
 
@@ -606,10 +607,11 @@ function TrashModal(props: {
   onClose: () => void;
   onToast: (msg: string, kind: Toast["kind"]) => void;
 }) {
-  const deleted = useLiveQuery(
+  const deletedQuery = useReactiveQuery(
     () => listDeletedLeads({ workspaceId: props.workspaceId }),
     [props.workspaceId],
-  ) ?? [];
+  );
+  const deleted = deletedQuery.data ?? [];
 
   async function handleRestore(leadId: string, username: string) {
     try {

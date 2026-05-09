@@ -1,6 +1,7 @@
 import React from "react";
 import type { BoardType } from "../../src/db/db";
 import { addLead } from "../../src/db/leadsRepo";
+import { useAuth } from "../../src/auth/AuthContext";
 
 function getDashboardUrl() {
   return chrome.runtime.getURL("dashboard.html");
@@ -189,7 +190,8 @@ type ImportState =
     };
 
 export default function App() {
-  const WORKSPACE_ID = "default";
+  const { user } = useAuth();
+  const WORKSPACE_ID = user?.id ?? "";
   const [board, setBoard] = React.useState<BoardType>("OUTBOUND");
   const fileRef = React.useRef<HTMLInputElement | null>(null);
 

@@ -13,7 +13,7 @@
 //   - Atualiza o banco assim que cada avatar chega — UI recebe broadcast e
 //     re-renderiza incrementalmente, em vez de esperar o batch acabar.
 
-import { db } from "./db";
+import { supabase } from "../utils/supabaseClient";
 import { updateLead } from "./leadsRepo";
 import { fetchAvatarForUsername } from "../instagram/avatarFetcher";
 
@@ -31,7 +31,7 @@ export type BackfillResult = BackfillProgress & {
 const STEP_DELAY_MS = 250;
 
 function sleep(ms: number) {
-  return new Promise<void>((res) => window.setTimeout(res, ms));
+  return new Promise<void>((res) => setTimeout(res, ms));
 }
 
 export async function backfillMissingAvatars(input: {
@@ -39,10 +39,22 @@ export async function backfillMissingAvatars(input: {
   onProgress?: (p: BackfillProgress) => void;
   shouldCancel?: () => boolean;
 }): Promise<BackfillResult> {
-  const all = await db.leads.where("workspaceId").equals(input.workspaceId).toArray();
-  const missing = all
-    .filter((l) => !l.avatarUrl)
-    .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+  const { data, error } = await supabase
+    .from("leads")
+    .select("id, username, updated_at, avatar_url")
+    .eq("workspace_id", input.workspaceId)
+    .is("deleted_at", null)
+    .is("avatar_url", null)
+    .order("updated_at", { ascending: false });
+
+  if (error) throw error;
+
+  const missing = (data ?? []) as Array<{
+    id: string;
+    username: string;
+    updated_at: number | string;
+    avatar_url: string | null;
+  }>;
 
   const total = missing.length;
   let updated = 0;

@@ -1,0 +1,17 @@
+services:
+  print-processor:
+    build: .
+    restart: always
+    env_file: .env
+    environment:
+      # Caminhos dentro do contêiner — as pastas do host são mapeadas abaixo
+      WATCH_FOLDER: /watch
+      PROCESSED_FOLDER: /processed
+      GOOGLE_CREDENTIALS_PATH: /app/google.json
+    volumes:
+      # Credenciais Google — somente leitura
+      - ./google.json:/app/google.json:ro
+      # Pasta monitorada: coloque os prints aqui no host
+      - ./prints:/watch
+      # Pasta de saída: prints processados ficam aqui no host
+      - ./processed:/processed
