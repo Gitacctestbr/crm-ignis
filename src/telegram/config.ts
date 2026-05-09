@@ -4,10 +4,10 @@
  */
 
 // @username do bot, sem o "@". Tem que bater com o que foi criado no @BotFather.
-export const BOT_USERNAME = "IgnisCRM_bot";
+export const BOT_USERNAME = "Ignis_crm_bot";
 
 // Display name (informativo pro usuário ver na UI).
-export const BOT_DISPLAY_NAME = "IGNIS BOT - CRM";
+export const BOT_DISPLAY_NAME = "IGNIS BOT CRM";
 
 /**
  * Gera o link mágico que o cliente clica no celular pra vincular.
