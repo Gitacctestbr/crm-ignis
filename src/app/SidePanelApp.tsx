@@ -20,6 +20,8 @@ import { BackupRestorePanel } from "../ui/BackupRestorePanel";
 import { ExtensionSettingsPanel } from "../ui/ExtensionSettingsPanel";
 import { LeadAvatar } from "../ui/LeadAvatar";
 import { MetricInput } from "../ui/MetricInput";
+import { ConnectTelegramButton } from "../telegram/ConnectTelegramButton";
+import { ReviewBanner } from "../telegram/ReviewBanner";
 
 type Tab = "Outbound" | "Social" | "Tasks" | "Filtros" | "Métricas" | "Settings";
 
@@ -517,15 +519,6 @@ export function SidePanelApp() {
 
         <button
           className="text-xs px-3 py-2 rounded-full border border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10 hover:border-[rgba(234,124,48,0.45)] transition-all disabled:opacity-50"
-          onClick={() => void handleForceSync()}
-          disabled={syncing}
-          title="Busca o CSV da URL configurada em Settings → Sincronização e importa leads novos."
-        >
-          {syncing ? "Sincronizando…" : "Sincronizar Leads Drive"}
-        </button>
-
-        <button
-          className="text-xs px-3 py-2 rounded-full border border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10 hover:border-[rgba(234,124,48,0.45)] transition-all disabled:opacity-50"
           onClick={() => void runAvatarBackfill()}
           title={backfill ? "Clique para cancelar" : "Busca fotos para todos os leads sem avatar. Precisa de uma aba do Instagram aberta."}
         >
@@ -533,7 +526,11 @@ export function SidePanelApp() {
             ? `Fotos… ${backfill.done}/${backfill.total} — cancelar`
             : "Atualizar Fotos"}
         </button>
+
+        {workspaceId && <ConnectTelegramButton workspaceId={workspaceId} variant="header" />}
       </div>
+
+      {workspaceId && <ReviewBanner workspaceId={workspaceId} />}
 
       {tab === "Métricas" ? (
         <MetricsPanel workspaceId={workspaceId} toast={toast} openDashboard={openOrFocusDashboard} />

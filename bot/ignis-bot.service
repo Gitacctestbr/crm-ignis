@@ -1,0 +1,19 @@
+[Unit]
+Description=IGNIS BOT - CRM Telegram worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/crm-ignis/bot
+ExecStart=/root/crm-ignis/bot/venv/bin/python main.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+# Limita memória pra evitar OOM travar a VPS inteira
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

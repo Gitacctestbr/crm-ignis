@@ -13,6 +13,7 @@ export default function LoginScreen() {
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [workspaceName, setWorkspaceName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,7 +23,7 @@ export default function LoginScreen() {
     setBusy(true);
     try {
       if (mode === "signin") await signIn(email.trim(), password);
-      else await signUp(email.trim(), password);
+      else await signUp(email.trim(), password, workspaceName.trim());
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -63,6 +64,17 @@ export default function LoginScreen() {
         </div>
 
         <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {mode === "signup" && (
+            <input
+              type="text"
+              required
+              placeholder="Nome do seu CRM (ex: Studio Beauty VT)"
+              value={workspaceName}
+              onChange={(e) => setWorkspaceName(e.target.value)}
+              maxLength={60}
+              style={inputStyle}
+            />
+          )}
           <input
             type="email"
             required

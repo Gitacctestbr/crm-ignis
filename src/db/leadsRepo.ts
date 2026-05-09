@@ -40,6 +40,10 @@ type LeadRow = {
   cta_url: string | null;
   cta_at: number | string | null;
   cta_note: string | null;
+  needs_review: boolean | null;
+  created_by_chat_id: number | string | null;
+  original_print_url: string | null;
+  extraction_obs: string | null;
 };
 
 function n(v: number | string | null | undefined): number | undefined {
@@ -69,6 +73,10 @@ function rowToLead(r: LeadRow): Lead {
     ctaUrl: r.cta_url ?? undefined,
     ctaAt: n(r.cta_at),
     ctaNote: r.cta_note ?? undefined,
+    needsReview: r.needs_review ?? false,
+    createdByChatId: n(r.created_by_chat_id),
+    originalPrintUrl: r.original_print_url ?? undefined,
+    extractionObs: r.extraction_obs ?? undefined,
   };
 }
 
@@ -93,6 +101,10 @@ function leadToRow(lead: Lead): LeadRow {
     cta_url: lead.ctaUrl ?? null,
     cta_at: lead.ctaAt ?? null,
     cta_note: lead.ctaNote ?? null,
+    needs_review: lead.needsReview ?? false,
+    created_by_chat_id: lead.createdByChatId ?? null,
+    original_print_url: lead.originalPrintUrl ?? null,
+    extraction_obs: lead.extractionObs ?? null,
   };
 }
 
@@ -360,6 +372,8 @@ export async function updateLead(input: {
       | "ctaUrl"
       | "ctaAt"
       | "ctaNote"
+      | "needsReview"
+      | "extractionObs"
     >
   >;
 }) {
@@ -435,6 +449,8 @@ export async function updateLead(input: {
   if (next.ctaUrl !== lead.ctaUrl) dbPatch.cta_url = next.ctaUrl ?? null;
   if (next.ctaAt !== lead.ctaAt) dbPatch.cta_at = next.ctaAt ?? null;
   if (next.ctaNote !== lead.ctaNote) dbPatch.cta_note = next.ctaNote ?? null;
+  if (next.needsReview !== lead.needsReview) dbPatch.needs_review = next.needsReview ?? false;
+  if (next.extractionObs !== lead.extractionObs) dbPatch.extraction_obs = next.extractionObs ?? null;
 
   const { error: updErr } = await supabase.from("leads").update(dbPatch).eq("id", lead.id);
   if (updErr) throw updErr;
@@ -523,6 +539,112 @@ export async function restoreLead(input: { workspaceId: string; leadId: string }
   if (error) throw error;
 
   await broadcastDbUpdated("restoreLead", input.leadId);
+}
+
+/**
+ * Lista leads que precisam de revisão manual (OCR ambíguo do bot Telegram).
+ * Esses leads foram criados com username placeholder ("_revisar_<chat>_<ts>")
+ * e precisam que o SDR confirme o username real e mova pro lead definitivo.
+ */
+export async function listLeadsForReview(input: { workspaceId: string }): Promise<Lead[]> {
+  if (!input.workspaceId) throw new Error("workspaceId obrigatório");
+
+  const { data, error } = await supabase
+    .from("leads")
+    .select("*")
+    .eq("workspace_id", input.workspaceId)
+    .eq("needs_review", true)
+    .is("deleted_at", null)
+    .order("updated_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((r) => rowToLead(r as LeadRow));
+}
+
+export type ReviewLeadResult =
+  | { status: "reviewed"; lead: Lead }
+  | { status: "merged_into_existing"; existingLead: Lead };
+
+/**
+ * Aplica a correção manual de um lead que veio com OCR ambíguo.
+ *
+ * Regras:
+ *  - Lead alvo precisa estar com needs_review=true (proteção).
+ *  - Novo username passa por canonicalUsername.
+ *  - Se já existe outro lead ativo com mesmo username no workspace,
+ *    apaga o lead em revisão (era placeholder) e devolve o existente.
+ *  - Senão, atualiza username/usernameLower/displayName/notes e
+ *    marca needs_review=false. extractionObs vai pra null.
+ */
+export async function reviewLead(input: {
+  workspaceId: string;
+  leadId: string;
+  username: string;
+  displayName?: string;
+  notes?: string;
+}): Promise<ReviewLeadResult | null> {
+  const lead = await getLeadById(input.leadId);
+  if (!lead) return null;
+  if (lead.workspaceId !== input.workspaceId) return null;
+  if (!lead.needsReview) {
+    throw new Error("Lead não está em revisão (needs_review=false)");
+  }
+
+  const usernameLower = canonicalUsername(input.username);
+  if (!usernameLower) throw new Error("username obrigatório");
+
+  // Já existe outro lead ativo com esse username?
+  const { data: collisions, error: lookupErr } = await supabase
+    .from("leads")
+    .select("*")
+    .eq("workspace_id", input.workspaceId)
+    .eq("username_lower", usernameLower)
+    .is("deleted_at", null)
+    .neq("id", lead.id)
+    .limit(1);
+  if (lookupErr) throw lookupErr;
+
+  const existing = collisions && collisions[0] ? rowToLead(collisions[0] as LeadRow) : null;
+
+  if (existing) {
+    // Conflito: já existe lead com esse username — descarta o placeholder.
+    const { error: delErr } = await supabase
+      .from("leads")
+      .update({ deleted_at: Date.now() })
+      .eq("id", lead.id);
+    if (delErr) throw delErr;
+    await broadcastDbUpdated("reviewLead:merged", existing.id);
+    return { status: "merged_into_existing", existingLead: existing };
+  }
+
+  const now = Date.now();
+  const dbPatch = {
+    username: usernameLower,
+    username_lower: usernameLower,
+    display_name: input.displayName?.trim() || null,
+    notes: typeof input.notes === "string" ? input.notes : lead.notes,
+    needs_review: false,
+    extraction_obs: null as string | null,
+    updated_at: now,
+    last_touched_at: now,
+  };
+
+  const { error: updErr } = await supabase.from("leads").update(dbPatch).eq("id", lead.id);
+  if (updErr) throw updErr;
+
+  const reviewed: Lead = {
+    ...lead,
+    username: usernameLower,
+    usernameLower,
+    displayName: dbPatch.display_name ?? undefined,
+    notes: dbPatch.notes,
+    needsReview: false,
+    extractionObs: undefined,
+    updatedAt: now,
+    lastTouchedAt: now,
+  };
+
+  await broadcastDbUpdated("reviewLead", reviewed.id);
+  return { status: "reviewed", lead: reviewed };
 }
 
 export async function listDeletedLeads(input: { workspaceId: string }): Promise<Lead[]> {
