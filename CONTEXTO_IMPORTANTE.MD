@@ -71,68 +71,98 @@
 - **Importar leads em massa** a partir de uma planilha do Google Sheets
 - **Ler prints** (screenshots da DM) e extrair os usernames via OCR (Claude Sonnet)
 
-**Estado atual em 9 de maio de 2026:**
-- **Versão NUVEM** está na branch `CRM-IGNIS-NUVEM-09-05-2026` no GitHub
-- Banco **100% migrado de Dexie (local) para Supabase (nuvem)**
-- Auth via Supabase (email/senha) **funcionando**
-- Deploy é **unpacked extension** (não está na Chrome Web Store ainda)
-- Build acontece numa **VPS Hostgator** via SSH; ZIP é baixado pro Mac e instalado em cada Chrome
+**Estado atual em 9 de maio de 2026 (fim do dia):**
+- **Captura principal de leads = bot do Telegram (`@Ignis_crm_bot`).** Cliente tira print no celular → compartilha pro bot → lead aparece no CRM em ~3-5s. Validado em produção com 27 leads na sessão de 9/5.
+- Banco **100% migrado de Dexie (local) para Supabase (nuvem)**.
+- Bot rodando como **systemd service `ignis-bot.service`** na VPS Hostgator. Restart=always, MemoryMax=512M.
+- **Sync via Google Sheets foi descontinuado.** Scripts Python OCR (`print_processor.py`) movidos pra `legacy/scripts/`.
+- Auth via Supabase (email/senha) **funcionando**, com novo campo `workspace_name` (nome humano que o bot mostra na confirmação).
+- Deploy é **unpacked extension** (não está na Chrome Web Store ainda).
+- Build acontece na **VPS Hostgator** via SSH; ZIP é baixado pro Mac e instalado em cada Chrome.
+- Branch ativa: `feat/telegram-bot-canal-principal` (a ser mergeada em `main` após validação de uso real).
 
 ---
 
-## 3. Arquitetura geral — os 3 mundos
+## 3. Arquitetura geral — os 4 mundos
 
-O projeto tem **3 mundos independentes** que se comunicam por canais bem definidos:
+O projeto tem **4 mundos** que se comunicam por canais bem definidos:
 
 ```
-┌──────────────────────┐         ┌────────────────────────┐
-│                      │         │                        │
-│   Extensão Chrome    │  HTTPS  │   SUPABASE             │
-│   (Mac/PC do user)   │ <─────> │   (PostgreSQL          │
-│                      │         │    cloud)              │
-│   - sidepanel        │         │                        │
-│   - dashboard        │         │   Tabelas:             │
-│   - popup            │         │   - leads              │
-│   - content script   │         │   - tasks              │
-│   - background       │         │   - activity_events    │
-│                      │         │   - daily_metrics      │
-└──────┬─────────┬─────┘         │   - user_workspaces    │
-       │         │               │                        │
-       │         │ Auth          │   Auth: email/senha    │
-       │         │ HTTPS         │   RLS: por workspace   │
-       │         │               │                        │
-       │         └─────────────> └────────────────────────┘
-       │
-       │ DOM scrape + injection
-       ▼
-┌──────────────────────┐         ┌────────────────────────┐
-│                      │         │                        │
-│   Instagram          │         │   Google Sheets        │
-│   (página web)       │         │   (CSV público)        │
-│                      │         │                        │
-│   - perfis           │         │   - alimentado pelos   │
-│   - DMs              │         │     scripts Python     │
-│   - web_profile_info │         │   - lido pelo sync     │
-│                      │         │     auto (30 min)      │
-└──────────────────────┘         └────────────────────────┘
+┌──────────────────────┐         ┌──────────────────────────┐
+│                      │         │                          │
+│   Extensão Chrome    │  HTTPS  │   SUPABASE               │
+│   (Mac/PC do user)   │ <─────> │   (PostgreSQL cloud)     │
+│                      │         │                          │
+│   - sidepanel        │         │   Tabelas:               │
+│   - dashboard        │         │   - leads                │
+│   - popup            │         │   - tasks                │
+│   - content script   │         │   - activity_events      │
+│   - background       │         │   - daily_metrics        │
+│                      │         │   - user_workspaces      │
+│   "Conectar Telegram"│         │   - telegram_links       │
+│   gera link mágico   │         │   - print_cache          │
+│   pro celular        │         │   - telegram_invites     │
+│                      │         │                          │
+│                      │         │   Storage bucket:        │
+│                      │         │   - print_review         │
+│                      │         │     (imagens needs_review)│
+└──────┬───────────────┘         │                          │
+       │                         │   Auth: email/senha      │
+       │ DOM scrape +            │   RLS: por workspace_id  │
+       │ injection (manual,      │                          │
+       │ desktop)                │                          │
+       ▼                         └──────────▲───────────────┘
+┌──────────────────────┐                    │
+│                      │                    │
+│   Instagram          │                    │ HTTPS
+│   (página web)       │                    │ (service_role)
+│                      │                    │
+│   - perfis           │         ┌──────────┴───────────────┐
+│   - DMs              │         │                          │
+│   - web_profile_info │         │   BOT TELEGRAM           │
+│                      │         │   (worker na VPS)        │
+└──────────────────────┘         │   /root/crm-ignis/bot/   │
+                                 │   systemd: ignis-bot     │
+                                 │                          │
+                                 │   - aiogram async        │
+                                 │   - Anthropic API        │
+                                 │     (Haiku 4.5 + Sonnet) │
+                                 │   - SHA-256 cache        │
+                                 │                          │
+                                 └──────────▲───────────────┘
+                                            │
+                                            │ HTTPS (long polling)
+                                            │
+                                 ┌──────────┴───────────────┐
+                                 │   @Ignis_crm_bot         │
+                                 │   no Telegram            │
+                                 │                          │
+                                 │   Cliente envia print    │
+                                 │   do celular → bot       │
+                                 └──────────────────────────┘
 ```
 
-**A VPS Hostgator NÃO aparece neste diagrama** porque ela não participa do runtime. Ela é só:
-- Cópia do código-fonte
-- Servidor onde `npm run build` roda
-- Storage temporário do ZIP gerado
+**Captura de leads tem 2 caminhos hoje:**
+1. **Telegram (principal, mobile):** cliente tira print no celular → manda pro bot → OCR → lead direto no Supabase. ~3-5s.
+2. **Extensão Chrome (secundário, desktop):** botão "Capturar lead da aba atual" no sidepanel quando cliente está navegando no IG no Chrome.
 
-A VPS **nunca conversa com a extensão**. Quando você mexe em código na VPS, **nada muda na extensão até você gerar um ZIP novo, baixar e reinstalar**.
+**A VPS Hostgator agora tem 2 papéis** (ambos em runtime):
+- **(novo) Hospeda o worker do bot Telegram** — processo rodando 24/7 via systemd
+- **(antigo) Servidor de build** — `npm run zip` quando precisa reinstalar a extensão
+
+A VPS **nunca conversa diretamente com a extensão Chrome**. Mas agora **conversa com o Telegram** (long polling) e com **Supabase** (escrita via service_role_key). Mexer no código da extensão na VPS = continua sem efeito até gerar ZIP novo. Mexer no código do bot na VPS = `systemctl restart ignis-bot` aplica imediatamente.
 
 ### Os canais de comunicação real (em runtime)
 
 | De → Para | Como |
 |---|---|
-| Extensão → Supabase | HTTPS via `@supabase/supabase-js` (todas as queries de domínio) |
+| Extensão → Supabase | HTTPS via `@supabase/supabase-js` (todas as queries de domínio, com JWT do user) |
 | Extensão → Instagram | Content script lê DOM + chama `web_profile_info` da API interna do IG |
-| Extensão → Google Sheets | `fetch()` num CSV público (link "publicar na web") da planilha |
-| Scripts Python → Anthropic API | `anthropic` SDK, OCR via Claude Sonnet 4.6 |
-| Scripts Python → Google Sheets | `gspread` SDK + Service Account credentials |
+| Bot Telegram → Telegram | `aiogram` async, long polling |
+| Bot Telegram → Anthropic API | `anthropic` SDK async, OCR via **Haiku 4.5** (fallback Sonnet 4.6) |
+| Bot Telegram → Supabase | `supabase-py` síncrono (envelopado em `asyncio.to_thread`), com **service_role_key** (bypassa RLS) |
+| ~~Extensão → Google Sheets~~ | ~~Descontinuado em 9/5/2026~~ |
+| ~~Scripts Python → Anthropic/Sheets~~ | ~~Descontinuado em 9/5/2026 (em `legacy/scripts/`)~~ |
 
 ### Os canais de "deploy" (off-line, manual)
 
@@ -140,8 +170,9 @@ A VPS **nunca conversa com a extensão**. Quando você mexe em código na VPS, *
 |---|---|
 | Mac (código novo) → GitHub | `git push` (Claude Code roda) |
 | GitHub → VPS | `git pull` na VPS via SSH |
-| VPS (build) → Mac | `scp` do ZIP gerado |
+| VPS (build da extensão) → Mac | `scp` do ZIP gerado |
 | Mac (ZIP) → Chrome | "Carregar sem compactação" no `chrome://extensions/` |
+| VPS (deploy do bot) → bot rodando | `systemctl restart ignis-bot` (sem ZIP, sem reinstalação na máquina cliente) |
 
 ---
 
@@ -334,6 +365,8 @@ Boa pergunta — não tem motivo técnico forte hoje. O Mac do Gustavo poderia f
 
 ## 7. Integração com Instagram
 
+> **Nota de status (9/5/2026):** essa integração continua existindo, mas hoje é **canal secundário** de captura. A entrada principal de leads é o bot do Telegram (vide seção 16). A integração com IG é usada quando o cliente está navegando no Chrome desktop e quer capturar um lead "à la carte".
+
 ### O que conseguimos fazer
 
 - **Detectar URL de perfil** (`instagram.com/username`) e extrair o username (`parseInstagram.ts`)
@@ -366,55 +399,42 @@ URLs de avatar do Instagram (`*.cdninstagram.com`, `*.fbcdn.net`) **expiram em a
 
 ---
 
-## 8. Sync com Google Sheets
+## 8. Sync com Google Sheets — DESCONTINUADO (9/5/2026)
 
-### O fluxo
+> **Substituído pelo bot do Telegram.** Manter aqui só pra histórico.
 
-```
-Scripts Python (no Mac)
-   ↓ leem prints + OCR via Claude
-   ↓ extraem usernames
-   ↓
-Google Sheets (planilha pessoal)
-   ↓ "Arquivo → Publicar na web → CSV"
-   ↓
-URL pública do CSV (algo tipo docs.google.com/...)
-   ↓ guardada em chrome.storage.local (ExtensionSettings.syncCsvUrl)
-   ↓
-background.ts dispara sync via chrome.alarms (30 em 30 min)
-   ↓ fetch do CSV
-   ↓ parse linha a linha
-   ↓ addLead() pra cada linha → Supabase
-```
+### Por que foi removido
 
-### Detalhes do sync
+O fluxo Sheets dependia de:
+1. Cliente criar/configurar planilha do Google
+2. Cliente "publicar na web" pra gerar CSV público
+3. Cliente colar URL no settings da extensão
+4. Auto-sync rodar a cada 30 min (sempre atrasado)
+5. Scripts Python rodarem no Mac do Gustavo (precisa Mac ligado)
 
-- **Auto-sync:** 30 em 30 min, via `chrome.alarms.create("crm-ignis-auto-sync", { periodInMinutes: 30 })`
-- **Manual:** dispara mensagem `CRM_IGNIS_FORCE_SYNC` → `background.ts` roda `syncLeadsFromSheets`
-- **Sem sessão Supabase:** sync vira no-op silencioso (não trava o service worker)
-- **Duplicatas:** controle delegado ao `addLead`, que usa `canonicalUsername` + índice único parcial no Postgres — não reimplementar
-- **Erro HTTP no fetch do CSV:** abortado silenciosamente. Se a planilha não existe ou foi despublicada, ninguém quebra
+Pra escalar pra 50 clientes isso era **inviável** — Mac ligado 24/7, criar 50 planilhas, configurar 50 vezes. O bot do Telegram resolve tudo isso: 1 worker centralizado na VPS, onboarding em ~30s por cliente (1 link mágico).
 
-### Formato esperado do CSV
+### O que aconteceu com o código
 
-Esperado: cada linha tem `link, nome, bio, seguidores, seguindo`.
-- `link` = URL do perfil no Instagram → username é extraído via `extractUsernameFromLink`
-- `nome` vira `displayName`
-- `bio`, `seguidores`, `seguindo` viram `notes` formatadas:
-  ```
-  Bio: <texto>
-  Seguidores: <num>
-  Seguindo: <num>
-  ```
-- A primeira linha pode ser cabeçalho (heurística: se a primeira célula contém "instagram.com" ou "http", é dado, não cabeçalho).
+- **`scripts/`** (Python OCR + gspread) foi movido pra **`legacy/scripts/`** — código preservado, mas fora do fluxo. Não rodar a não ser pra fallback de emergência.
+- **`background.ts`** — alarme `crm-ignis-auto-sync` removido + handler `CRM_IGNIS_FORCE_SYNC` removido + `chrome.alarms.clear` defensivo pra desativar em extensões antigas que ainda tinham o alarme criado.
+- **Settings da extensão** — campo `syncCsvUrl` ainda existe no schema do `chrome.storage.local`, mas não é mais lido em lugar nenhum.
+- **Botões "Sincronizar Leads Drive"** removidos do sidepanel e dashboard.
+- **Função `syncLeadsFromSheets()`** ainda existe em `background.ts` mas nunca é chamada — fica como fallback técnico se um dia precisar voltar.
+
+### Se um dia precisar reativar
+
+Não-trivial. Reativar exige descomentar o alarme + restaurar o handler + restaurar UI. Mas se chegar nesse ponto, considera primeiro: o bot do Telegram realmente está fora? Ou seria mais barato consertar o bot?
 
 ---
 
-## 9. Scripts Python (OCR de prints)
+## 9. Scripts Python (OCR de prints) — LEGADO (9/5/2026)
 
-### O que é
+> **Substituído pelo bot do Telegram (vide seção 16).** Pasta `scripts/` foi renomeada pra `legacy/scripts/`.
 
-Um subsistema **independente** da extensão. Roda no Mac do Gustavo. Pasta: `scripts/`.
+### O que era
+
+Um subsistema **independente** da extensão. Rodava no Mac do Gustavo. Pasta: `scripts/` (hoje em `legacy/scripts/`).
 
 ### Stack
 
@@ -450,7 +470,36 @@ LLMs têm **viés de correção ortográfica**. Sem prompt cuidadoso, o Claude v
 
 ## 10. Fluxo de deploy completo
 
-Versão completa do que acontece quando o Gustavo diz **"sobe a versão nova pro meu Chrome"**.
+Existem **2 deploys distintos** hoje:
+
+### A) Deploy da EXTENSÃO (quando Gustavo diz "sobe a versão nova pro meu Chrome")
+
+Versão completa abaixo. Esse fluxo gera ZIP que precisa ser reinstalado em cada Chrome.
+
+### B) Deploy do BOT (quando muda código em `bot/`)
+
+Mais simples — sem ZIP, sem reinstalação cliente:
+
+```bash
+# Local: commit + push
+git add bot/ && git commit -m "..." && git push
+
+# VPS: pull + restart
+ssh root@<vps> 'cd /root/crm-ignis && git pull && systemctl restart ignis-bot'
+
+# Confirmar:
+ssh root@<vps> 'journalctl -u ignis-bot -n 20 --since "1 min ago"'
+# Esperado: "Bot conectado: @Ignis_crm_bot" e "Run polling"
+```
+
+Se mudou `bot/requirements.txt`:
+```bash
+ssh root@<vps> 'cd /root/crm-ignis/bot && ./venv/bin/pip install -r requirements.txt && systemctl restart ignis-bot'
+```
+
+---
+
+### Versão completa — deploy da extensão
 
 ### Etapa 1 — Mac → GitHub
 
@@ -629,9 +678,11 @@ Tem um módulo `src/db/backup.ts` que exporta as 4 tabelas do workspace pra um J
 
 **Fase 5 — `feat/foto-perfil-100-funciona` (8-9 de maio):** Refinamento de captura de avatar.
 
-**Fase 6 — Sessão de 9 de maio de 2026 (esta):** Atualização do `CLAUDE.md` pra refletir a nova arquitetura, criação da branch `CRM-IGNIS-NUVEM-09-05-2026`, redeploy completo da extensão.
+**Fase 6 — Sessão de 9 de maio de 2026 (manhã):** Atualização do `CLAUDE.md` pra refletir a nova arquitetura Supabase, criação da branch `CRM-IGNIS-NUVEM-09-05-2026`, redeploy completo da extensão.
 
-### Decisões importantes desta sessão
+**Fase 7 — Sessão de 9 de maio de 2026 (tarde/noite — esta):** Bot do Telegram entra como **canal principal de captura**, substituindo o sync de Sheets + scripts Python. Branch `feat/telegram-bot-canal-principal`. Validado em produção com 27 leads importados via celular do Gustavo. Esse é o salto qualitativo da escala — agora dá pra onboardar 50 clientes sem o Mac do Gustavo precisar estar ligado.
+
+### Decisões importantes desta sessão (Fase 6 — manhã)
 
 1. **Reescrita completa do `CLAUDE.md`** — o anterior descrevia Dexie como banco principal, totalmente desatualizado. Novo documenta Supabase, auth, deploy via VPS, segurança do `.env`.
 
@@ -644,6 +695,36 @@ Tem um módulo `src/db/backup.ts` que exporta as 4 tabelas do workspace pra um J
 5. **VPS é frágil** — descobrimos durante a sessão que a pasta `/root/crm-ignis` tinha sido apagada. Solução adotada: clonar fresh e copiar `.env` local de volta. Implicação: deploys futuros devem checar isso antes.
 
 6. **Sales OS é separado** — existe uma pasta `/Users/rovancastro/Desktop/dashboard` com um projeto Next.js + FastAPI chamado "Sales OS" que **não é parte do Ignis CRM**. Tem outro Supabase. Ainda não foi deployado. Quando for, precisa de tratamento separado e atenção à segurança do `.env` (tem senha do Postgres em texto puro).
+
+### Decisões importantes desta sessão (Fase 7 — tarde/noite)
+
+1. **Adoção do bot do Telegram como canal principal** — depois de avaliar Drive/PWA/WhatsApp, escolhemos Telegram pelo balanço UX (2 toques pra mandar print) × custo (zero) × tempo de onboarding (~30s). Decisão de "1 bot único, N vínculos" em vez de "1 bot por cliente" — escalável e simples.
+
+2. **Estratégia de OCR em camadas pra economizar tokens sem perder leads:**
+   - Camada 1: SHA-256 da imagem → cache (zero custo em duplicata literal)
+   - Camada 2: Haiku 4.5 padrão (~5x mais barato que Sonnet)
+   - Camada 3: escala automaticamente pra Sonnet 4.6 SE Haiku marca `OBS:` no username
+   - Camada 4: se Sonnet também marca `OBS:`, salva lead com `needs_review=true` + imagem original no bucket `print_review` pra SDR corrigir manualmente
+   - Custo estimado pra 10 clientes × 50 prints/dia: ~$15-30/mês
+
+3. **Sem token de vinculação descartável (por enquanto)** — link mágico hoje é direto: `t.me/Ignis_crm_bot?start=ws_<workspace_id>`. Risco de vazamento aceito porque ambiente é controlado (Gustavo conhece os 10 clientes pessoalmente). Tabela `telegram_invites` foi criada vazia, **preparada pra ativar no futuro** quando virar produto público.
+
+4. **Lead com OCR ambíguo NÃO bloqueia o cliente** — em vez de pedir confirmação humana ao cliente no Telegram, salva no CRM com badge ⚠️ amarelo (`needs_review=true`) + imagem original anexada. SDR corrige no banner "X leads pra revisar" do sidepanel. Best of both worlds: cliente nunca espera, dado nunca se perde.
+
+5. **Multi-operador por design** — 1 chat_id pode vincular a N workspaces. Útil pro próprio Gustavo que atua como SDR de vários clientes. Comando `/trocar` no bot abre inline keyboard pra ele alternar antes de mandar prints. Cliente normal nunca usa, UX dele é de 1 toque.
+
+6. **Service role do Supabase no bot, sem tentar usar RLS no worker** — service_role bypassa RLS por design. Pra compensar, o código do bot SEMPRE inclui `workspace_id` explicitamente em INSERTs (defesa em profundidade). RLS continua protegendo o frontend.
+
+7. **Sheets foi REMOVIDO, não deprecated** — eliminamos o caminho ativo (alarme + handler + botões) em vez de deixar coexistir, porque convivência adicionaria complexidade sem ganho real. Código permanece em `legacy/` pra fallback técnico.
+
+8. **VPS continua frágil** — pasta `/root/crm-ignis/scripts/.env` com chave Anthropic não estava versionada nem na VPS, só no Mac. Solução: lemos do Mac local e jogamos via SSH heredoc no `bot/.env` da VPS. Aprendizado: futuros deploys precisam ter backup separado de credenciais.
+
+9. **Pegadinhas de versão de lib (resolvidas no commit de fix):**
+   - `supabase-py < 2.18` rejeita o novo formato `sb_secret_*` (só validava JWT)
+   - `aiogram 3.13` exige `pydantic < 2.10`, conflito com supabase 2.18+
+   - Solução: `supabase>=2.18.0` + `aiogram>=3.15.0` no `requirements.txt`
+
+10. **Deploy do bot é "warm"** — diferente da extensão que precisa rebuild + redistribuição, o bot atualiza em segundos: `git pull && systemctl restart ignis-bot`. Mudou no servidor, mudou pra todo mundo. Isso muda profundamente o ciclo de iteração comparado com o que era antes.
 
 ### O que ficou desorganizado
 
@@ -674,6 +755,13 @@ Tem um módulo `src/db/backup.ts` que exporta as 4 tabelas do workspace pra um J
 | `.env` exposto pela web | `.env` em pasta `public_html` | Manter fora do document root ou bloquear via `.htaccess` |
 | Hostname/IP da VPS em arquivo versionado | "Pra ficar mais cômodo" | Memória privada do Claude, nunca em arquivo do repo |
 | Pasta `/root/crm-ignis` apagada | Limpeza manual sem aviso | Deploy script deve checar e clonar de novo se preciso |
+| Bot retorna `0 leads salvos, X erros técnicos` | Chave Anthropic inválida/expirada | Logs mostram `401 invalid x-api-key` — gerar nova em console.anthropic.com |
+| `supabase-py 2.10` rejeita `sb_secret_*` | Lib antiga só validava JWT | Pinar `supabase>=2.18.0` |
+| `aiogram 3.13` conflita com supabase novo | Pydantic incompatível | Pinar `aiogram>=3.15.0` |
+| `python3 -m venv` falha na VPS Ubuntu | Pacote `python3-venv` ausente | `apt-get install -y python3-venv python3.X-venv` |
+| Bot aceita print mas não responde | Chat não vinculado a workspace | Cliente clica `/start <link>` antes de mandar prints |
+| Lead com username `_revisar_<chat>_<ts>` | OCR ambíguo virou placeholder | Badge ⚠️ no Kanban — SDR corrige via banner "Revisar" |
+| `git pull` na VPS aborta com "Please commit your changes" | Edição local conflita | `git checkout -- <arquivo>` ou `git stash` antes |
 
 ### Armadilhas de migração de schema
 
@@ -689,11 +777,15 @@ Tem um módulo `src/db/backup.ts` que exporta as 4 tabelas do workspace pra um J
 
 - [ ] **Criar `tasksRepo.ts`** — tabela existe, repo não. Bloqueia features de tarefas.
 - [ ] **Configurar identidade Git do usuário** — commits ficam com `<rovancastro@MacBook-Air-de-Rovan.local>` em vez do email do GitHub.
-- [ ] **Decidir destino da VPS** — manter como build server (atual) ou migrar build pro Mac/CI/CD. Hoje a VPS é frágil (pasta sumiu uma vez).
-- [ ] **Versionamento de migrations SQL** — hoje só temos o `supabase_setup.sql` "snapshot". Pra evoluir, considerar Supabase Migrations CLI ou pasta `migrations/` com SQL incremental numerado.
-- [ ] **Não-root user na VPS** — `root` é o atual. Boa prática criar um usuário dedicado com sudo.
+- [ ] **Decidir destino da VPS** — agora ela é build server **E** runtime do bot. Migrar build pro Mac/CI/CD continua válido, mas o bot precisa ficar na VPS (ou serverless, mas hoje é VPS).
+- [ ] **Pasta `migrations/` criada na Fase 7** — começamos versionamento incremental com `migrations/2026_05_telegram_bot.sql`. Próxima migration deve seguir nomenclatura `YYYY_MM_<descrição>.sql`.
+- [ ] **Não-root user na VPS** — `root` é o atual. Boa prática criar usuário dedicado com sudo.
 - [ ] **Backup automático** — `backup.ts` funciona manualmente. Vale agendar (talvez `chrome.alarms` exportando JSON pro `chrome.downloads`?).
-- [ ] **Decidir sobre Sales OS (`/Users/rovancastro/Desktop/dashboard`)** — projeto separado parado desde 7 de maio. Quando subir, atenção: `.env` tem senha do Postgres em texto puro.
+- [ ] **Rotacionar tokens expostos em chat (Telegram + Anthropic)** antes de ir pra produção real com clientes pagantes. Os atuais foram colados na sessão de 9/5, ainda funcionam mas devem ser revogados.
+- [ ] **PR da branch `feat/telegram-bot-canal-principal` em `main`** — depois que validação prolongada (alguns dias de uso) confirmar estabilidade.
+- [ ] **Ativar `telegram_invites` (token descartável)** — quando passar de "ambiente controlado entre Gustavo e clientes que ele conhece" pra "público mais amplo". Tabela já existe.
+- [ ] **Monitoramento de saúde do bot** — hoje, se o serviço cair, ninguém é avisado até cliente reclamar. Vale uptime check (UptimeRobot, Healthchecks.io).
+- [ ] **Decidir sobre Sales OS** — projeto separado em `/Users/rovancastro/Desktop/dashboard` parado desde 7/5. Quando subir, atenção: `.env` tem senha do Postgres em texto puro.
 
 ### Backlog de produto
 
@@ -745,9 +837,151 @@ Termos que apareceram neste documento e podem confundir:
 
 ---
 
+## 16. Bot Telegram — guia operacional completo
+
+### Visão de 30 segundos
+
+`@Ignis_crm_bot` é UM bot que atende **todos** os clientes do Ignis CRM. Roda como worker Python na VPS (`/root/crm-ignis/bot/`) via systemd. Cliente vincula chat ao seu workspace clicando num link mágico (gerado no botão "Conectar Telegram" do CRM). Daí em diante: cliente tira print do IG → manda pro bot → lead entra no CRM em ~3-5s.
+
+### Anatomia da pasta `bot/`
+
+```
+bot/
+├── main.py             — entrypoint aiogram, todos os handlers, agrupamento de álbum
+├── ocr.py              — Claude (Haiku 4.5 → fallback Sonnet 4.6), retry exponencial
+├── db.py               — Supabase service role: links, cache, leads, Storage
+├── config.py           — carrega/valida variáveis do .env
+├── requirements.txt    — pinned: aiogram>=3.15, supabase>=2.18, anthropic, python-dotenv
+├── .env.example        — template (real .env tem chmod 600 só na VPS, fora do Git)
+├── ignis-bot.service   — systemd unit (Restart=always, MemoryMax=512M)
+└── venv/               — virtualenv Python (criado no deploy, não versionado)
+```
+
+### Comandos do bot
+
+| Comando | Quem usa | O que faz |
+|---|---|---|
+| `/start` (sem arg) | Qualquer cliente | Mostra status atual ou pede pra clicar no link mágico |
+| `/start ws_<id>` (deep-link) | Cliente clica no link do CRM | Vincula chat ao workspace, marca como ativo |
+| `/atual` | Todos | Mostra qual workspace tá ativo agora |
+| `/trocar` | Admin SDR (Gustavo) | Inline keyboard com workspaces vinculados — escolhe pra qual mandar próximos prints |
+| `/desconectar` | Cliente | Remove vínculo ativo (`is_active=false`, marca `unlinked_at`) |
+| `/ajuda` | Qualquer um | Lista comandos + dica de envio como arquivo |
+| `/status` | Debug | Mostra `chat_id` + workspace_id + workspace_name |
+
+### Pipeline de processamento de print
+
+```
+Cliente manda print
+    ↓
+Bot baixa imagem (foto comprimida ou documento original)
+    ↓
+SHA-256 do bytes → print_cache lookup
+    ├── HIT  → responde "já processado: @fulano" (zero custo Claude)
+    └── MISS → continua
+    ↓
+Lookup workspace ativo via chat_id em telegram_links
+    ↓
+Claude Haiku 4.5 com PROMPT anti-alucinação ("scanner óptico")
+    ↓
+Resposta JSON parsed:
+    ├── {"valid": false, ...} → bot responde "❌ não é IG"
+    ├── username com "OBS:" → escala automaticamente pra Sonnet 4.6
+    └── username limpo → continua
+    ↓
+upsert_lead no Supabase (idempotente):
+    ├── Existe ativo → status="exists", não cria duplicata
+    ├── Existe soft-deleted → status="restored", reativa
+    └── Não existe → status="created", insere lead + activity_event
+    ↓
+Se needs_review=true: sobe imagem pro bucket print_review (path = workspace_id/lead_id.jpg)
+    ↓
+Grava print_cache (hash → lead_id) — SÓ depois do INSERT confirmado
+    ↓
+Bot responde resumo no chat
+```
+
+### Ack do Telegram = depois do INSERT
+
+Regra crítica anti-perda: o bot só dá `ack` no `update_id` do Telegram **depois que o lead está confirmado no Supabase**. Se o serviço morre entre receber o print e gravar, Telegram refaz delivery na reconexão. Esse é o motivo pelo qual a perda de lead é praticamente impossível.
+
+### Concorrência
+
+- **Semáforo por chat:** `MAX_CONCURRENT_OCR_PER_CHAT=3` em `bot/.env`. Cliente manda álbum de 50 = processa em ondas de 3.
+- **Sem pool global** explícito, mas o overhead de cada chamada Anthropic já limita naturalmente.
+- **Álbum agrupado com debounce 1.5s:** Telegram entrega fotos do álbum 1 a 1, mas todas têm o mesmo `media_group_id`. Bot espera 1.5s sem chegar nova foto, daí processa lote junto e responde 1 mensagem só ("✅ X salvos, Y erros").
+
+### Como conectar um cliente novo (operação)
+
+1. Cliente cria conta no CRM (signup) — preenche "Nome do seu CRM" (workspace_name).
+2. No sidepanel, header tem botão "📲 Telegram" amarelo.
+3. Cliente clica → abre modal com QR code (link `t.me/Ignis_crm_bot?start=ws_<UUID-do-workspace>`).
+4. Cliente escaneia QR no celular → abre Telegram → aperta "Iniciar".
+5. Bot responde "✅ Conectado ao workspace 'Nome do CRM'!"
+6. Botão no CRM muda pra 🟢 verde. Pronto.
+
+### Como o admin (Gustavo) usa multi-workspace
+
+1. Pede um link do CRM de cada cliente que ele atende como SDR.
+2. Em cada link, faz `/start ws_<id>` no celular dele.
+3. Quando vai trabalhar, manda `/trocar` no bot → escolhe cliente → começa a mandar prints.
+4. Termina aquele cliente → `/trocar` → outro.
+
+### Troubleshooting comum
+
+| Sintoma | Diagnóstico provável | Comando pra investigar |
+|---|---|---|
+| Bot não responde | Serviço caiu | `ssh root@<vps> 'systemctl status ignis-bot'` |
+| Bot responde "Nenhum workspace conectado" mas você vinculou | `is_active=false` na linha errada | Checar `telegram_links` no painel Supabase |
+| "0 leads salvos, X erros técnicos" | Quase sempre Anthropic API key | `journalctl -u ignis-bot -n 50 \| grep 401` |
+| OCR alucinando username | Modelo ignorando "scanner óptico" | Inspecionar `prompt` em `bot/ocr.py` — pode precisar reforçar |
+| Lead aparece mas sem `display_name` | Print só tinha username, sem nome | Comportamento normal — SDR completa manualmente |
+| Mesma imagem reenviada não responde "duplicata" | `print_cache` não tem o hash | Provavelmente serviço caiu antes de fazer cache_store — sintoma de retry parcial |
+
+### Comandos úteis na VPS
+
+```bash
+# Status do serviço
+ssh root@<vps> 'systemctl status ignis-bot'
+
+# Logs ao vivo
+ssh root@<vps> 'journalctl -u ignis-bot -f'
+
+# Logs últimos 30 min sem ruído de HTTP
+ssh root@<vps> 'journalctl -u ignis-bot --since "30 min ago" | grep -vE "httpx|aiogram\.dispatcher"'
+
+# Reiniciar (depois de mudar código)
+ssh root@<vps> 'cd /root/crm-ignis && git pull && systemctl restart ignis-bot'
+
+# Reiniciar com requirements novos
+ssh root@<vps> 'cd /root/crm-ignis/bot && ./venv/bin/pip install -r requirements.txt && systemctl restart ignis-bot'
+
+# Ver .env (mascarado)
+ssh root@<vps> 'cat /root/crm-ignis/bot/.env | sed "s/=\(.\{8\}\).*/=\1...REDACTED/"'
+```
+
+### Rotação de credenciais
+
+Faz parte da disciplina de segurança. **3 segredos separados:**
+
+1. **Token do bot Telegram:** `@BotFather` → `/revoke` → escolhe `@Ignis_crm_bot` → te dá novo. Atualiza `TELEGRAM_BOT_TOKEN` no `bot/.env` da VPS + `systemctl restart`.
+2. **Anthropic API key:** [console.anthropic.com](https://console.anthropic.com) → API Keys → revoga atual + cria nova. Atualiza `ANTHROPIC_API_KEY` no `bot/.env`.
+3. **Supabase service_role_key:** [supabase.com](https://supabase.com) → Settings → API → "Reveal" service_role. Pra rotacionar, a UI tem botão "Reset" (raro precisar). Atualiza `SUPABASE_SERVICE_ROLE_KEY` no `bot/.env`.
+
+> **IMPORTANTE:** essas 3 chaves NUNCA devem ser coladas em conversa de chat (mesmo com Claude). Quando precisar, abre `bot/.env` direto via SSH e edita. As que estão hoje na VPS foram coladas em sessão de 9/5/2026 — devem ser rotacionadas antes de qualquer cliente pagante real.
+
+### Onde NÃO mexer
+
+- **Função `get_my_workspace_id()` no Postgres** — toda policy RLS depende dela. Mexer = mexer em todas as tabelas.
+- **Constraint `leads_username_lower_is_canonical`** — proteção contra usernames com `@` ou caracteres errados. Pular = corromper banco.
+- **Índice `telegram_links_one_active_per_chat`** — garante que `/trocar` funciona corretamente. Único parcial em `is_active=true`.
+- **`upsert_lead` em `bot/db.py`** — lógica de idempotência (active OR soft-deleted) é frágil. Mudanças exigem testar restore + duplicata + lead novo.
+
+---
+
 ## ENCERRAMENTO
 
-Este arquivo é uma fotografia do projeto em **9 de maio de 2026**. Atualize quando algo grande mudar:
+Este arquivo é uma fotografia do projeto em **9 de maio de 2026 (atualizado no fim do dia, após Fase 7)**. Atualize quando algo grande mudar:
 
 - Migração para outro provedor de banco
 - Mudança no fluxo de deploy

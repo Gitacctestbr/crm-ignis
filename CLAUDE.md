@@ -20,15 +20,27 @@ npm run zip          # ZIP do build (usado no deploy via VPS)
 
 ## Arquitetura
 
-Extensão Chrome MV3 (WXT + React + TypeScript). **Banco único: Supabase (PostgreSQL).** Não existe mais Dexie/IndexedDB local — toda escrita/leitura é HTTP. **Auth obrigatório** (Supabase Auth email/senha): sem sessão, operações em `background.ts` viram no-op; na UI lançam erro.
+Extensão Chrome MV3 (WXT + React 19 + TypeScript + Tailwind v4). **Banco único: Supabase (PostgreSQL).** Não existe mais Dexie/IndexedDB local — toda escrita/leitura é HTTP. **Auth obrigatório** (Supabase Auth email/senha): sem sessão, operações em `background.ts` viram no-op; na UI lançam erro.
 
 Multi-tenant por workspace. Convenção: `workspace_id === auth.uid()` (TEXT). RLS no Supabase isola entre usuários. A função `get_my_workspace_id()` no Postgres é o que toda policy consulta — mexer nela mexe em tudo.
 
 UI reativa por broadcast: ao escrever, repos enviam `CRM_IGNIS_DB_UPDATED` via `chrome.runtime.sendMessage`. `useReactiveQuery` (em `src/utils/`) escuta e re-roda a query. **Se você escrever no Supabase sem passar pelo repo, a UI não atualiza.**
 
-**Captura de leads via celular = bot do Telegram.** Pasta `bot/` (Python async com aiogram) roda na VPS, recebe prints, OCR via Claude Haiku 4.5 (fallback Sonnet 4.6 quando ambíguo), grava lead direto no Supabase. Cliente vincula chat via deep-link `t.me/IgnisCRM_bot?start=ws_<workspace_id>`. Tabelas: `telegram_links`, `print_cache`, `telegram_invites`. Detalhes em `bot/main.py` e na UI em `src/telegram/`.
+**Captura de leads via celular = bot do Telegram.** Pasta `bot/` (Python async com aiogram) roda na VPS via systemd, recebe prints, OCR via Claude Haiku 4.5 (fallback Sonnet 4.6 quando ambíguo), grava lead direto no Supabase. Deep-link: `t.me/IgnisCRM_bot?start=ws_<workspace_id>`. Tabelas: `telegram_links`, `print_cache`, `telegram_invites`. Sync via Google Sheets foi descontinuado.
 
-Sync via Google Sheets foi **descontinuado** — o `print_processor.py` antigo está em `legacy/scripts/`. O alarme `crm-ignis-auto-sync` foi removido do `background.ts`. Não reabilitar sem motivo claro.
+---
+
+## Design & UI
+
+**Sempre invoque a skill `/design-agent` antes de criar/redesenhar componente, mudar layout, mexer em CSS/estilo inline, ou escolher cor/fonte.** Ela tem as regras não-negociáveis (hierarquia, tipografia, espaçamento, contraste) e o catálogo de bugs visuais conhecidos.
+
+**Tokens canônicos em `assets/theme.css`** — fonte única de verdade. Use `rgb(var(--accent))`, `var(--radius)`, etc. Nunca hard-code `#ff7a18`. Cores em formato R G B (espaço separado) pra suportar alpha modifier do Tailwind.
+
+**Fonte:** Inter via `@fontsource/inter` (weights 400/500/600/700/800). Importada em `assets/main.css` antes do `tailwindcss`. Não usar Google Fonts CDN (CSP de extensão pode bloquear) nem self-host artesanal.
+
+**Identidade:** dark com gradiente sutil (laranja Ignis `#ea7c30` + teal acento `#2dd4bf`), glassmorphism leve, raios 10-14px, sombras `0 4-12px rgba(0,0,0,0.30-0.45)`. Tom "Notion-dark + alma Ignis": minimalista, espaçoso, legível.
+
+**Popup (`entrypoints/popup/App.tsx`):** redesenhado em fluxo de views type-driven (`home` → `choose-funnel` → `preview` → `importing` → `done`). 3 ações: Abrir Kanban, Subir lista, Logout (footer). Ao tocar nele, preserve esse paradigma.
 
 ---
 
@@ -52,15 +64,14 @@ Todo username (gravação, busca, comparação) **deve passar por `canonicalUser
 - Cliente em `src/utils/supabaseClient.ts`. Sessão persiste via storage adapter pro `chrome.storage.local` (porque `localStorage` não funciona em service worker).
 - Use `getCurrentWorkspaceId()` em UI (lança se sem sessão); use `getCurrentUserId()` em `background.ts` (retorna null — no-op é melhor que crash do service worker).
 - `AuthProvider` faz upsert idempotente em `user_workspaces` ao logar (mapeia `auth.uid()` → workspace_id).
+- **Logout disponível no popup** (footer "Sair"). Após `signOut()`, AuthGate detecta ausência de sessão e renderiza `LoginScreen` automaticamente. Sem reload manual.
 
 ---
 
 ## Avatares
 
-- `Lead.avatarUrl` opcional, mas preencha assim que possível.
-- Backfill manual (`backfillMissingAvatars`) precisa de aba do IG aberta. Sync auto faz fire-and-forget pra leads novos com cap de 20 e 300ms de delay.
-- **CDN URLs do Instagram expiram em semanas.** `LeadAvatar` cai pra iniciais; usuário roda backfill pra refrescar.
-- Nunca faça backfill em loop apertado — sempre delay entre requisições (rate limit do IG).
+- `Lead.avatarUrl` opcional, mas preencha assim que possível. CDN URLs do Instagram expiram em semanas — `LeadAvatar` cai pra iniciais. Usuário roda backfill manual (botão "Atualizar fotos" no dashboard) pra refrescar.
+- `backfillMissingAvatars` precisa de aba do IG aberta. Cap de 20 leads, delay 300ms por requisição. Nunca faça em loop apertado (rate limit do IG).
 
 ---
 
@@ -68,23 +79,20 @@ Todo username (gravação, busca, comparação) **deve passar por `canonicalUser
 
 A extensão **não vai pra Chrome Web Store**. Fluxo:
 
-1. **Push pro GitHub** (Claude faz quando o usuário pede): `git add -A && git commit -m "..." && git push origin <branch>`.
+1. **Push pro GitHub** (Claude faz quando o usuário pede): `git add <arquivos> && git commit -m "..." && git push origin <branch>`. Stage seletivo, nunca `-A` (evita commitar `.env`, sensíveis, untracked acidental).
 2. **Build na VPS via SSH** (host/user/path em memória privada do Claude — não neste arquivo):
    ```bash
-   ssh <vps-user>@<vps-host>
-   cd <project-path>
-   git pull && npm install && npm run zip
+   ssh <vps-user>@<vps-host> "cd <project-path> && git pull && npm install && npm run zip"
    ```
-3. **Download do ZIP via `scp`:** `scp <vps>:<path>/.output/*.zip ~/Desktop/`
-4. **Load unpacked** em cada Chrome: extrai ZIP → `chrome://extensions` → "Modo de desenvolvedor" → "Carregar sem compactação".
-5. Login Supabase puxa os leads.
+3. **Download do ZIP via `scp`:** `scp '<vps>:<path>/.output/*.zip' ~/Desktop/` (aspas no caminho remoto — o zsh local expande o glob senão).
+4. **Load unpacked** em cada Chrome: extrai ZIP → `chrome://extensions` → "Modo de desenvolvedor" → "Carregar sem compactação". Login Supabase puxa os leads.
 
 ### Segurança do `.env`
 
 - Anon key embutida no JS é pública por design (RLS protege). OK.
-- `.env` na VPS **NUNCA pode ficar em pasta acessível pela web** (`public_html`). Mantenha fora do document root.
-- O ZIP de build não contém `.env` — distribua sem medo.
-- **Hostname/IP da VPS não vai em arquivo versionado** — alvo de SSH brute-force. Fica na memória privada do Claude.
+- `.env` na VPS **NUNCA pode ficar em pasta acessível pela web**. Mantenha fora do document root.
+- O ZIP de build não contém `.env`.
+- **Hostname/IP da VPS não vai em arquivo versionado** — fica na memória privada do Claude.
 
 ---
 
@@ -92,10 +100,10 @@ A extensão **não vai pra Chrome Web Store**. Fluxo:
 
 Antes de criar nova mensagem, grep `CRM_IGNIS_` em `entrypoints/background.ts` — **reutilize** antes de inventar. Convenções:
 
-- `CRM_IGNIS_DB_UPDATED` é o broadcast crítico (toda escrita dispara; UIs com `useReactiveQuery` ouvem).
-- `CRM_IGNIS_TOAST` exibe toast em qualquer UI aberta.
-- `CRM_IGNIS_FORCE_SYNC` foi **removido** (era do sync de Sheets — agora descontinuado).
-- Mensagens que dependem de auth devem checar `getCurrentUserId()` e responder `{ ok: false, reason: "Não autenticado." }` se ausente.
+- `CRM_IGNIS_DB_UPDATED` — broadcast crítico (toda escrita dispara; UIs com `useReactiveQuery` ouvem).
+- `CRM_IGNIS_TOAST` — exibe toast em qualquer UI aberta.
+- `CRM_IGNIS_FORCE_SYNC` — **removido** (era do sync de Sheets — descontinuado).
+- Mensagens que dependem de auth checam `getCurrentUserId()` e respondem `{ ok: false, reason: "Não autenticado." }` se ausente.
 
 ---
 
@@ -103,82 +111,34 @@ Antes de criar nova mensagem, grep `CRM_IGNIS_` em `entrypoints/background.ts` �
 
 - **Identificação via URL de perfil** (`instagram.com/{username}/`) — use `parseInstagram.ts`.
 - **Avatar via `web_profile_info`** (mensagens `CRM_IGNIS_GET_PROFILE_META` / `CRM_IGNIS_FETCH_AVATAR`).
-- **NUNCA fazer scraping de DOM em `/direct/t/...`** — DOM ofuscado, captura o usuário logado em vez do lead. Identificação na DM é sempre **manual** (busca por nome/@).
+- **NUNCA fazer scraping de DOM em `/direct/t/...`** — DOM ofuscado, captura o usuário logado em vez do lead. Na DM identificação é sempre **manual** (busca por nome/@).
 - **NUNCA usar classes CSS ofuscadas do IG** (`x1qjc9v5` etc.) — mudam diariamente.
 - Tailwind **não funciona** em content script — use inline `React.CSSProperties`.
-- **Overlays fixos** (painel, botão flutuante): Shadow DOM com `z-index:2147483647` (isola CSS do IG).
-- **Badges inline** (no fluxo da página): sem Shadow DOM, anchor em `header img` (`img?.closest('a[role="link"]') ?? img?.parentElement`).
+- **Overlays fixos** (painel, botão flutuante): Shadow DOM com `z-index:2147483647` (isola CSS do IG). **Badges inline:** sem Shadow DOM, anchor em `header img` (`img?.closest('a[role="link"]') ?? img?.parentElement`).
 
 ---
 
 ## Padrão obrigatório: MutationObserver + geração-counter
 
-Use quando o mount depende de (1) fetch async ao background **E** (2) MutationObserver esperando o DOM. Sem isso, badge monta em página errada após SPA nav.
+Usar quando o mount depende de (1) fetch async ao background **E** (2) MutationObserver esperando o DOM. Sem isso, badge monta em página errada após SPA nav.
 
-```typescript
-let _gen = 0;
-
-function watch(username: string) {
-  unmount();
-  const gen = ++_gen;
-  let data: Data | null = null;
-
-  const tryMount = () => {
-    if (gen !== _gen) return;        // stale
-    if (!data || _host?.isConnected) return;
-    const anchor = document.querySelector("header img");
-    if (!anchor) return;
-    mount(anchor, data);
-  };
-
-  _observer = new MutationObserver(tryMount);
-  _observer.observe(document.body, { childList: true, subtree: true });
-
-  fetchFromBackground(username).then((result) => {
-    if (gen !== _gen) return;
-    data = result;
-    if (data) tryMount();
-    else _observer?.disconnect();
-  });
-}
-
-function unmount() {
-  _gen++;                            // CRÍTICO: invalida pendentes
-  _observer?.disconnect(); _observer = null;
-  _root?.unmount(); _root = null;
-  _host?.remove(); _host = null;
-}
-```
-
-**Regras:** `unmount` SEMPRE incrementa `_gen`. `watch` só é chamado dentro de `if (routeChanged)` em `checkRoute()` — o failsafe interval chama `checkRoute` ~20×/10s sem mudança de rota; sem o gate, watcher remonta sem motivo.
+**Receita:** `let _gen = 0;` no módulo. `watch(username)` chama `unmount()` primeiro, captura `const gen = ++_gen;`, e cada callback async testa `if (gen !== _gen) return;` antes de mutar DOM. `unmount()` SEMPRE faz `_gen++` pra invalidar pendentes. `watch` só é chamado dentro de `if (routeChanged)` em `checkRoute()` — o failsafe interval chama `checkRoute` ~20×/10s sem mudança de rota; sem o gate, watcher remonta sem motivo. Referência viva: `entrypoints/content.ts`.
 
 ---
 
-## Bot Telegram (canal principal de captura)
+## Bot Telegram (canal principal)
 
-`bot/` é Python async (aiogram + supabase-py) que roda na VPS via systemd. Não é parte do build da extensão; é processo separado.
+`bot/` é Python async (aiogram + supabase-py) na VPS via systemd. Não é parte do build da extensão; é processo separado. **OCR em camadas (economia + zero perda):** SHA-256 → `print_cache` (hit = $0) → Haiku 4.5 → escala pra Sonnet 4.6 se Haiku marca `OBS:` → se Sonnet também marca, lead com `needs_review=true` + imagem no bucket `print_review` (SDR corrige via `reviewLead`).
 
-**Schema de OCR em camadas (economia + zero perda):**
-1. SHA-256 da imagem → `print_cache` lookup. Hit = $0, responde "já processado".
-2. Claude Haiku 4.5 (default).
-3. Se Haiku marca `OBS:` no username → escala automaticamente pra Sonnet 4.6.
-4. Se Sonnet também marca `OBS:` → cria lead com `needs_review=true` + placeholder `_revisar_<chat>_<ts>` + imagem no bucket `print_review`. SDR corrige via UI (`reviewLead` em `leadsRepo.ts`).
+Worker usa **service_role_key** (bypassa RLS) — sempre passar `workspace_id` explicitamente em INSERTs. `telegram_links (chat_id, workspace_id, is_active)` — só 1 ativo por chat (regra do `/trocar`).
 
-**Vinculação:**
-- 1 bot único, N clientes, N chat_ids por workspace
-- `telegram_links (chat_id, workspace_id, is_active)` — apenas 1 ativo por chat (regra do `/trocar`)
-- Worker usa **service_role_key** (bypassa RLS) — sempre passar `workspace_id` explicitamente em INSERTs
+**Rotacionar token:** @BotFather → `/revoke` → atualizar `bot/.env` na VPS → `systemctl restart ignis-bot`. Adicionar campo OCR no lead: mesmos 4 lugares do `updateLead`.
 
-**Rotacionar token do bot (após qualquer disclosure):**
-1. Telegram → @BotFather → `/revoke` → escolhe `@IgnisCRM_bot`
-2. Atualizar `bot/.env` na VPS com token novo
-3. `systemctl restart ignis-bot`
-
-**Adicionar campo novo de OCR no lead:** mesmos 4 lugares de `updateLead` (tipo `Lead`, `LeadRow`, `Pick`, mappers `rowToLead`/`leadToRow`) — vide regra do banco.
+---
 
 ## Tasks (feature pendente)
 
-A tabela `tasks` existe em `supabase_setup.sql` mas **não tem repo dedicado** (`tasksRepo.ts` ainda não existe). Quando implementar: siga o padrão de `leadsRepo.ts` — mappers snake/camel, allowlist no update, broadcast após escrita.
+Tabela `tasks` existe em `supabase_setup.sql` mas **não tem `tasksRepo.ts`**. Quando implementar: padrão de `leadsRepo.ts` — mappers snake/camel, allowlist no update, broadcast após escrita.
 
 ---
 
@@ -186,16 +146,23 @@ A tabela `tasks` existe em `supabase_setup.sql` mas **não tem repo dedicado** (
 
 | Erro | Causa | Solução |
 |---|---|---|
-| Lead capturado é o próprio usuário logado | Scraping de `<nav>` do IG | Não fazer scraping na DM |
-| Badge monta na página errada após SPA nav | MutationObserver sem `_gen` | Padrão acima |
+| Lead capturado é o próprio usuário logado | Scraping de DOM da DM | Identificação manual em `/direct/` |
+| Badge monta na página errada após SPA nav | MutationObserver sem `_gen` | Receita acima |
 | Watcher chamado 20× sem mudança de rota | Chamada fora de `if (routeChanged)` | Gate em `routeChanged` |
 | Tailwind silenciosamente ignorado | Usado em content script | `React.CSSProperties` inline |
 | Operação no banco falha sem feedback | Sessão Supabase ausente/expirada | `getCurrentUserId()` no bg, `getCurrentWorkspaceId()` na UI |
 | Campo ignorado no `updateLead` | Faltou em algum dos 4 lugares | Atualizar `Lead`, `LeadRow`, `Pick`, mappers |
 | Usuário vê leads de outro workspace | RLS errada ou `user_workspaces` vazio | Conferir policy + linha em `user_workspaces` |
-| `window.setTimeout` em service worker | `avatarBackfill.ts` usa `window` | No bg, `setTimeout` direto ou `Promise` com timeout |
+| `window.setTimeout` em service worker | `avatarBackfill.ts` usa `window` | No bg, `setTimeout` direto |
 | Duplicatas de lead | Username não normalizado | `canonicalUsername` antes de gravar/buscar |
 | Lead deletado reaparece após sync | Hard delete | Soft delete via `deleted_at` |
-| OCR alucinando usernames | Viés de correção ortográfica das LLMs | Prompt: "scanner óptico — PROIBIDO corrigir/deduzir/autocompletar" |
-| `.env` exposto pela web | Em `public_html` na VPS | Fora do document root ou bloqueio via `.htaccess` |
-| Hostname/IP da VPS em arquivo versionado | "Pra ficar mais cômodo" | Memória privada do Claude, nunca em arquivo do repo |
+| OCR alucinando usernames | Viés de correção das LLMs | Prompt: "scanner óptico — PROIBIDO corrigir" |
+| Popup encolhe e quebra texto palavra-a-palavra | Root sem `min-width` (Chrome ajusta ao conteúdo) | `min-width: 360px` no container raiz |
+| Login parece de outro app | LoginScreen herdou tema diferente | Coerência: usar tokens do `theme.css`, fonte Inter, mesma identidade |
+| Ícone genérico de quebra-cabeças na barra | PNGs do template WXT não foram trocados | Substituir `public/icon/{16,32,48,96,128}.png` |
+| Bug visual em popup mas não em dashboard | Largura/contexto diferente entre entrypoints | Testar em todos os contextos onde o componente roda |
+| Glob não expande em SCP remoto | zsh local expande antes de mandar | Aspas: `scp 'user@host:path/*.zip' .` |
+| Bot Python: `supabase-py` rejeita `sb_secret_*` | Versões < 2.18 só validam JWT antigo | Pinar `supabase>=2.18.0` |
+| Bot Python: aiogram conflita com supabase | `aiogram<3.15` exige `pydantic<2.10` | Pinar `aiogram>=3.15.0` |
+| `.env` exposto pela web | Em `public_html` na VPS | Fora do document root |
+| Hostname/IP da VPS em arquivo versionado | "Pra ficar mais cômodo" | Memória privada do Claude |
