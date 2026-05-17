@@ -41,6 +41,12 @@ export type Lead = {
   ctaUrl?: string;
   ctaAt?: number;
   ctaNote?: string;
+
+  // Bot Telegram: rastreabilidade + revisão manual
+  needsReview?: boolean;          // OCR ambíguo → SDR precisa corrigir manualmente
+  createdByChatId?: number;       // qual chat capturou (rastreabilidade multi-operador)
+  originalPrintUrl?: string;      // path no bucket print_review (UI gera signed URL)
+  extractionObs?: string;         // texto da observação do OCR
 };
 
 export type Task = {

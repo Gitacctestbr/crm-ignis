@@ -6,6 +6,7 @@ import { BackupRestorePanel } from "../../src/ui/BackupRestorePanel";
 import { LeadAvatar } from "../../src/ui/LeadAvatar";
 import { STAGES as CRM_STAGES, normalizeStageId, stageLabel } from "../../src/crm/stages";
 import { useAuth } from "../../src/auth/AuthContext";
+import { ReviewBanner } from "../../src/telegram/ReviewBanner";
 import { useReactiveQuery } from "../../src/utils/useReactiveQuery";
 
 const STAGES = CRM_STAGES;
@@ -426,15 +427,6 @@ export default function App() {
           </button>
 
           <button
-            className="text-xs px-3 py-1.5 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:border-[rgba(234,124,48,0.35)] hover:bg-white/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            onClick={() => void handleForceSync()}
-            disabled={syncing || importing}
-            title="Busca o CSV da URL configurada nas Settings e importa leads novos automaticamente (roda também a cada 30 min)."
-          >
-            {syncing ? "Sincronizando…" : "Sincronizar Leads Drive"}
-          </button>
-
-          <button
             className="text-xs px-3 py-1.5 rounded-[var(--radius)] border border-[rgb(var(--border))] hover:border-red-500/30 hover:bg-red-500/5 hover:text-red-300 transition-all"
             onClick={() => setShowTrash((v) => !v)}
             title="Ver leads removidos (Lixeira)"
@@ -479,6 +471,12 @@ export default function App() {
 
       {/* ── Board ── */}
       <div className="w-full px-4 py-5">
+        {WORKSPACE_ID ? (
+          <div className="mb-3">
+            <ReviewBanner workspaceId={WORKSPACE_ID} />
+          </div>
+        ) : null}
+
         {showBackup ? (
           <div className="mb-5">
             <BackupRestorePanel />
@@ -727,6 +725,14 @@ function LeadCard(props: {
             rel="noreferrer"
           >
             @{lead.username}
+          {lead.needsReview ? (
+            <span
+              className="ml-1.5 inline-block align-middle"
+              title={lead.extractionObs || "OCR ambíguo — revisa no painel lateral"}
+            >
+              ⚠️
+            </span>
+          ) : null}
           </a>
           {lead.displayName ? (
             <div className="text-[10px] text-[rgb(var(--muted))] truncate">{lead.displayName}</div>

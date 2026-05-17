@@ -195,38 +195,21 @@ async function syncLeadsFromSheets(): Promise<SyncResult> {
 }
 
 export default defineBackground(() => {
-  // ─── Auto-sync a cada 30 minutos ─────────────────────────────────────────
-  chrome.alarms.create("crm-ignis-auto-sync", { periodInMinutes: 30 });
+  // ─── Sync via Google Sheets DESATIVADO ───────────────────────────────────
+  // Substituído pelo bot do Telegram (vide bot/main.py + src/telegram/).
+  // syncLeadsFromSheets() continua exportada como fallback técnico —
+  // se um dia precisar voltar a importar de CSV, basta reativar abaixo.
+  //
+  // chrome.alarms.create("crm-ignis-auto-sync", { periodInMinutes: 30 });
+  // chrome.alarms.onAlarm.addListener(...);
 
-  chrome.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name !== "crm-ignis-auto-sync") return;
-    syncLeadsFromSheets()
-      .then(({ created }) => {
-        if (created > 0) {
-          chrome.runtime
-            .sendMessage({
-              type: "CRM_IGNIS_TOAST",
-              message: `Auto-sync: ${created} novo(s) lead(s) importado(s) da planilha.`,
-            })
-            .catch(() => {});
-        }
-      })
-      .catch(() => {});
-  });
+  // Limpa alarme legado caso ele tenha sido criado em versão anterior
+  chrome.alarms.clear("crm-ignis-auto-sync").catch(() => {});
 
   // ─── Message listeners ────────────────────────────────────────────────────
   chrome.runtime.onMessage.addListener((message: any, _sender, sendResponse) => {
-    // === SYNC MANUAL ===
-    if (message?.type === "CRM_IGNIS_FORCE_SYNC") {
-      syncLeadsFromSheets()
-        .then(({ created, skipped, errors }) => {
-          sendResponse({ ok: true, created, skipped, errors });
-        })
-        .catch((err) => {
-          sendResponse({ ok: false, error: String(err) });
-        });
-      return true;
-    }
+    // CRM_IGNIS_FORCE_SYNC removido — o bot Telegram entrega leads em
+    // tempo real, sem necessidade de "sync". Botão da UI também removido.
 
     // === CAPTURA LEAD ===
     if (message?.type === "CRM_IGNIS_CAPTURE") {

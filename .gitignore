@@ -22,6 +22,15 @@ BACKUP DATABASE/
 .env.local
 scripts/.env
 scripts/google.json
+legacy/scripts/.env
+legacy/scripts/google.json
+bot/.env
+
+# Bot Python — artefatos locais
+bot/venv/
+bot/__pycache__/
+bot/**/__pycache__/
+bot/.pytest_cache/
 
 # Claude Code local config (memórias e settings pessoais)
 .claude/
